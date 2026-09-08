@@ -2,8 +2,6 @@
 
 Bài thực hành minh họa quy trình cấp và xác minh bằng tốt nghiệp số: nhà trường ký chứng chỉ, sinh viên lựa chọn thông tin chia sẻ và đơn vị tuyển dụng xác minh tính hợp lệ.
 
-## Công nghệ và cách chạy
-
 Dự án sử dụng Node.js 20 trở lên, TypeScript, pnpm, W3C Verifiable Credentials 2.0, ECDSA-SD-2023 của Digital Bazaar và Vitest.
 
 ```bash
