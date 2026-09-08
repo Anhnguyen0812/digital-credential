@@ -1,0 +1,30 @@
+{
+  "name": "digital-credential-week4-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "tsx src/demo.ts",
+    "benchmark": "tsx src/benchmark.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "dependencies": {
+    "@digitalbazaar/data-integrity": "2.5.0",
+    "@digitalbazaar/ecdsa-multikey": "1.8.0",
+    "@digitalbazaar/ecdsa-sd-2023-cryptosuite": "3.4.1",
+    "@digitalbazaar/vc": "7.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.19.0"
+}
