@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#14304f">
+<title>VNU Digital Wallet — Ví Văn bằng Số Sinh viên & Cựu sinh viên</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/portal.css">
+</head>
+<body>
+
+<!-- Global Navigation Bar -->
+<div class="global-bar">
+  <div class="global-bar-left">
+    <span class="global-pill">Non-Custodial P-256 Wallet</span>
+    <span>Ví Văn bằng Số Cá nhân — OpenID4VCI &amp; OpenID4VP</span>
+  </div>
+  <nav class="global-nav">
+    <a href="/issuer.html">1. Web Nhà trường <span class="port-tag">:4001</span></a>
+    <a href="/wallet.html" class="active">2. Web Ví Sinh viên <span class="port-tag">:3000</span></a>
+    <a href="/verifier.html">3. Web Tuyển dụng <span class="port-tag">:4002</span></a>
+    <a href="/index.html">Bàn Demo Hội đồng &amp; Tấn công</a>
+  </nav>
+</div>
+
+<!-- LOGIN SCREEN (SSO @vnu.edu.vn or VNeID Level 2) -->
+<div id="loginView" class="auth-screen">
+  <div class="auth-container">
+    <div class="auth-form-col">
+      <div class="auth-brand">
+        <div class="auth-logo">VNU</div>
+        <div>
+          <h1>Cổng Ví Văn bằng Số Cá nhân</h1>
+          <p>Xác thực định danh để nhận văn bằng từ Trường (OpenID4VCI) &amp; quản lý thiết bị</p>
+        </div>
+      </div>
+
+      <form id="stuLoginForm">
+        <div class="form-group">
+          <label class="form-label" for="authMethod">Phương thức xác thực định danh người học</label>
+          <select id="authMethod">
+            <option value="sso">Đăng nhập SSO Email trường (@vnu.edu.vn — Sinh viên đang học / mới tốt nghiệp)</option>
+            <option value="vneid">Định danh điện tử VNeID Mức 2 (Số CCCD 12 số — Cựu sinh viên đã thu hồi email)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" id="identLabel" for="inIdent">Địa chỉ Email trường (@vnu.edu.vn)</label>
+          <input type="text" id="inIdent" value="23020009@vnu.edu.vn" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inStuPass">Mật khẩu xác thực</label>
+          <input type="password" id="inStuPass" value="Demo@2026" required>
+        </div>
+        <div id="stuLoginErr" class="alert alert-danger mb-12" style="display:none"></div>
+        <button type="submit" class="btn-accent btn-block">Xác thực &amp; Mở Ví Văn bằng Số</button>
+      </form>
+
+      <div class="auth-note">
+        <b>Lưu ý kiến trúc Non-Custodial:</b> Tài khoản SSO / VNeID <b>chỉ dùng để xác minh danh tính với Nhà trường khi nhận bằng hoặc xin cấp lại</b>. Khóa riêng <code>did:key</code> và Base VC nằm hoàn toàn trên thiết bị của bạn; khi đi ứng tuyển, bạn không cần đăng nhập vào trường.
+      </div>
+    </div>
+
+    <div class="auth-demo-col">
+      <div>
+        <div class="auth-section-label">Chọn Kịch bản Sinh viên / Cựu sinh viên (1-Click)</div>
+
+        <button type="button" class="demo-acc-card" data-m="sso" data-i="23020009@vnu.edu.vn">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Nguyễn Phi Anh (MSSV: 23020009)</span>
+            <span class="badge badge-info">SSO Email trường</span>
+          </div>
+          <div class="demo-acc-sub">Sinh viên K68 tốt nghiệp Xuất sắc (GPA 3.65) — Có sẵn 1 Bằng Cử nhân CNTT &amp; 1 Chứng chỉ INT3306 đã được duyệt chờ nhận vào Ví.</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-m="vneid" data-i="001193005566">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Phạm Thu Trang (Cựu SV K56 · 2015)</span>
+            <span class="badge badge-success">VNeID · CCCD</span>
+          </div>
+          <div class="demo-acc-sub">Cựu sinh viên ra trường năm 2015 (Email trường đã bị thu hồi) — Đăng nhập bằng số CCCD <code>001193005566</code> để nhận bằng số hóa từ sổ gốc.</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-m="sso" data-i="11020345@vnu.edu.vn">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Thử đăng nhập bằng Email trường đã bị thu hồi</span>
+            <span class="badge badge-danger">Test Thu hồi Mail</span>
+          </div>
+          <div class="demo-acc-sub">Mô phỏng cựu sinh viên K56 cố đăng nhập bằng email cũ <code>11020345@vnu.edu.vn</code> → Hệ thống từ chối và hướng dẫn sang VNeID.</div>
+        </button>
+      </div>
+
+      <div class="muted mt-12">
+        Mật khẩu demo chung: <code class="mono">Demo@2026</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN WALLET SHELL -->
+<div id="appView" class="app-shell" style="display:none">
+  <aside class="sidebar">
+    <div>
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">VNU</div>
+        <div class="sidebar-brand-text">
+          <h2>VNU Digital Wallet</h2>
+          <p id="sideWalletDid">did:key:z6Mkp…</p>
+        </div>
+      </div>
+
+      <div class="nav-section-label">Ví Văn bằng Cá nhân</div>
+      <div class="nav-list" id="navList">
+        <button class="nav-btn active" data-tab="my-vc">
+          <span>Văn bằng &amp; Nhận bằng mới</span>
+          <span class="nav-badge" id="navClaimBadge">0</span>
+        </button>
+        <button class="nav-btn" data-tab="scan-qr">
+          <span>Quét QR &amp; Trình bày (VP)</span>
+        </button>
+        <button class="nav-btn" data-tab="history">
+          <span>Lịch sử Chia sẻ Dữ liệu</span>
+        </button>
+        <button class="nav-btn" data-tab="device">
+          <span>Đổi Điện thoại &amp; Sao lưu</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="sidebar-user-card">
+        <div class="sidebar-user-name" id="stuName">–</div>
+        <div class="sidebar-user-role" id="stuMeta">–</div>
+        <div class="mt-8">
+          <span class="badge badge-info" id="stuAuthBadge">SSO</span>
+        </div>
+      </div>
+      <button id="btnStuLogout" class="btn-secondary btn-block">Đổi tài khoản sinh viên</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="page-header">
+      <div>
+        <h1 id="walletPageTitle">Ví Văn bằng Số &amp; Nhận Văn bằng từ Nhà trường</h1>
+        <p id="walletPageSub">Khóa riêng P-256 Multikey lưu độc lập trên thiết bị · Ký Proof-of-Possession khi nhận bằng (OpenID4VCI) và khi trình bày (OpenID4VP)</p>
+      </div>
+      <div class="row">
+        <span class="badge badge-success" id="didPill">did:key active</span>
+        <button class="btn-secondary btn-sm" id="btnQuickDemoVc">+ Cấp nhanh VC mẫu (1-Click)</button>
+      </div>
+    </header>
+
+    <main class="page-body">
+
+      <!-- TAB 1: MY CREDENTIALS & OPENID4VCI CLAIM -->
+      <section id="tab-my-vc" class="tab-pane">
+        <div class="split split--wide-left">
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Văn bằng đang lưu trên Thiết bị này (Local Non-Custodial Store)</h3>
+                  <p class="card-sub">Dữ liệu gốc (Base VC) có chữ ký ECDSA-SD-2023 của Trường, chỉ thiết bị này nắm giữ</p>
+                </div>
+              </div>
+              <div class="card-body" id="localVcList"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Hồ sơ Văn bằng của bạn tại Cổng Nhà trường (OpenID4VCI)</h3>
+                  <p class="card-sub">Ký <code>c_nonce</code> bằng khóa riêng của Ví để nhận văn bằng đã được Trưởng phòng duyệt</p>
+                </div>
+                <button class="btn-sm btn-secondary" id="btnRefreshMe">Làm mới</button>
+              </div>
+              <div class="card-body" id="issuerRecordsBox"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Thanh tra Cấu trúc JSON-LD (Base VC trong Ví)</h3>
+              </div>
+              <div class="card-body">
+                <pre class="code-block" id="vcJsonPre">Chọn một văn bằng bên trái để xem cấu trúc JSON-LD và chữ ký ecdsa-sd-2023…</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: SCAN QR & SELECTIVE DISCLOSURE PRESENTATION -->
+      <section id="tab-scan-qr" class="tab-pane" style="display:none">
+        <div class="split split--wide-right">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Quét mã QR Yêu cầu Xác minh (OpenID4VP)</h3>
+                <p class="card-sub">Nhận truy vấn DCQL từ Cổng Tuyển dụng (Hoạt động qua Camera HTTPS, Ảnh chụp hoặc Đồng bộ LAN)</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Chọn văn bằng trong Ví để trình bày</label>
+                <select id="presentCredSel"></select>
+              </div>
+
+              <div id="qrReaderBox" class="qr-reader-box"></div>
+
+              <div class="stack">
+                <button id="btnStartCam" class="btn-accent">1. Mở Camera quét mã QR trực tiếp (HTTPS)</button>
+                <label class="btn btn-secondary" for="qrFileInput">
+                  2. Chụp ảnh / Chọn ảnh mã QR từ thiết bị
+                </label>
+                <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none">
+                <button id="btnSyncLatestQr" class="btn-secondary">3. Đồng bộ ngay phiên QR đang mở trên Cổng Tuyển dụng</button>
+              </div>
+
+              <div class="manual-uri-box">
+                <label class="form-label">Hoặc dán trực tiếp đường dẫn <code>request_uri</code></label>
+                <div class="row">
+                  <input type="text" id="manualReqUri" placeholder="http://localhost:4002/api/verifier/request/...">
+                  <button id="btnLoadUri" class="btn-secondary nowrap">Tải yêu cầu</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Xem trước &amp; Tiết lộ Chọn lọc (Selective Disclosure Consent)</h3>
+                <p class="card-sub">Ví tự động tạo Derived VC ẩn các trường nhạy cảm và đóng chữ ký Holder Binding (PoP)</p>
+              </div>
+            </div>
+            <div class="card-body" id="consentPanel">
+              <div class="empty-state">
+                Hãy quét mã QR hoặc bấm <b>"3. Đồng bộ ngay phiên QR đang mở trên Cổng Tuyển dụng"</b> ở cột bên trái để xem chi tiết các trường dữ liệu mà Nhà tuyển dụng yêu cầu.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: PRESENTATION HISTORY -->
+      <section id="tab-history" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Nhật ký Chia sẻ Văn bằng cho Nhà tuyển dụng</h3>
+              <p class="card-sub">Theo dõi minh bạch những thông tin bạn đã tiết lộ và những thông tin đã được che giấu mật mã</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Đơn vị Tuyển dụng (Audience)</th>
+                  <th>Thuộc tính Đã tiết lộ</th>
+                  <th>Thuộc tính Đã ẩn (ECDSA-SD)</th>
+                  <th>Hiệu năng Mật mã</th>
+                  <th>Kết quả</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: DEVICE CHANGE, AES-256-GCM BACKUP & RECOVERY -->
+      <section id="tab-device" class="tab-pane" style="display:none">
+        <div class="split">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">1. Sao lưu &amp; Khôi phục Ví Mã hóa (AES-256-GCM + scrypt)</h3>
+                <p class="card-sub">Dùng khi đổi sang điện thoại mới: Khóa riêng và văn bằng được mã hóa bằng mật khẩu của bạn</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Mật khẩu bảo vệ bản sao lưu (Passphrase)</label>
+                <input type="password" id="backupPass" value="MyWalletSecret@2026">
+              </div>
+              <div class="row mb-12">
+                <button id="btnExportBackup" class="btn-accent">Tạo bản Sao lưu AES-256-GCM</button>
+                <button id="btnDownloadBackup" class="btn-secondary" disabled>Tải tệp .json về máy</button>
+              </div>
+
+              <div class="section-divider">
+                <label class="form-label">Khôi phục từ bản Sao lưu (Hoặc tải tệp sao lưu .json)</label>
+                <input type="file" id="restoreFileInput" accept=".json" class="mb-8">
+                <button id="btnRestoreBackup" class="btn-secondary btn-block">Giải mã AES-256-GCM &amp; Khôi phục Ví</button>
+              </div>
+              <pre class="code-block code-170" id="backupPreviewPre">Chưa tạo bản sao lưu trong phiên này.</pre>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">2. Mô phỏng Đổi Điện thoại mới / Mất Thiết bị</h3>
+                <p class="card-sub">Kiểm chứng cơ chế xoay vòng khóa <code>did:key</code> mới và quy trình xin Nhà trường cấp lại văn bằng</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="device-did-box">
+                <div><b>Định danh Thiết bị hiện tại (Holder DID):</b></div>
+                <div class="mono break-all text-accent mt-8" id="deviceDidBox">–</div>
+              </div>
+
+              <button id="btnSimulateNewPhone" class="btn-danger btn-block mb-12">
+                Mô phỏng Đổi sang Điện thoại mới (Xóa Ví cũ &amp; Sinh khóa did:key mới)
+              </button>
+
+              <div class="device-note">
+                <b>Hai cách khôi phục sau khi bấm "Đổi sang Điện thoại mới":</b>
+                <ol class="device-steps">
+                  <li><b>Nếu đã có Bản sao lưu AES-256-GCM:</b> Bấm <i>"Giải mã &amp; Khôi phục Ví"</i> ở cột bên trái để lấy lại nguyên vẹn khóa <code>did:key</code> cũ và toàn bộ văn bằng.</li>
+                  <li><b>Nếu mất điện thoại &amp; không có bản sao lưu (hoặc bị lộ ví):</b> Chuyển sang tab <b>"Văn bằng &amp; Nhận bằng mới"</b> → Bấm <b>"Yêu cầu Cấp lại &amp; Thu hồi bằng cũ"</b>. Khi Trưởng phòng Đào tạo duyệt, bằng cũ sẽ bị bật Bit = 1 (Thu hồi) và bạn nhận bằng mới gắn với khóa <code>did:key</code> của điện thoại mới!</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script src="https://unpkg.com/html5-qrcode" async></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg, kind = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = msg;
+  $('toastBox').appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
+    ...opts,
+    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
+  });
+  const data = await res.json().catch(() => ({}));
+  return {ok: res.ok, status: res.status, data};
+}
+
+const CLAIM_LABEL = {
+  studentName: 'Họ và tên',
+  graduated: 'Đã tốt nghiệp',
+  legacyProvenance: 'Lưu vết sổ gốc (LegacyProvenance)',
+  major: 'Chuyên ngành',
+  degreeName: 'Tên văn bằng',
+  graduationDate: 'Ngày tốt nghiệp',
+  gpa: 'Điểm trung bình (GPA)',
+  classification: 'Xếp loại bằng',
+  studentCode: 'Mã sinh viên',
+  courseName: 'Tên học phần',
+  certificateValid: 'Hiệu lực chứng chỉ',
+  courseCode: 'Mã học phần',
+  courseHours: 'Thời lượng (giờ)',
+  completionDate: 'Ngày hoàn thành',
+  grade: 'Điểm chữ (Grade)',
+  skills: 'Kỹ năng đạt được'
+};
+
+let meData = null, activeRequest = null, activePreview = null, savedBackupBundle = null, qrScanner = null;
+
+$('authMethod').onchange = () => {
+  const m = $('authMethod').value;
+  if (m === 'sso') {
+    $('identLabel').textContent = 'Địa chỉ Email trường (@vnu.edu.vn)';
+    $('inIdent').value = '23020009@vnu.edu.vn';
+  } else {
+    $('identLabel').textContent = 'Số Căn cước công dân (Định danh VNeID Mức 2 — 12 chữ số)';
+    $('inIdent').value = '001193005566';
+  }
+};
+
+document.querySelectorAll('.demo-acc-card').forEach(btn => {
+  btn.onclick = () => {
+    $('authMethod').value = btn.dataset.m;
+    $('authMethod').onchange();
+    $('inIdent').value = btn.dataset.i;
+    $('inStuPass').value = 'Demo@2026';
+    $('stuLoginForm').requestSubmit();
+  };
+});
+
+$('stuLoginForm').onsubmit = async e => {
+  e.preventDefault();
+  $('stuLoginErr').style.display = 'none';
+  const r = await api('/api/wallet-portal/auth/login', {
+    method: 'POST',
+    body: {
+      method: $('authMethod').value,
+      identifier: $('inIdent').value.trim(),
+      password: $('inStuPass').value
+    }
+  });
+  if (!r.ok) {
+    $('stuLoginErr').textContent = r.data?.error || 'Xác thực thất bại';
+    $('stuLoginErr').style.display = 'block';
+    return;
+  }
+  toast(`Đã xác thực: ${r.data.student.fullName} (${r.data.method.toUpperCase()})`, 'ok');
+  await loadMe();
+};
+
+$('btnStuLogout').onclick = async () => {
+  await api('/api/wallet-portal/auth/logout', {method: 'POST'});
+  $('loginView').style.display = 'flex';
+  $('appView').style.display = 'none';
+};
+
+function switchTab(tab) {
+  document.querySelectorAll('#navList .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-pane').forEach(p => p.style.display = p.id === `tab-${tab}` ? 'block' : 'none');
+}
+document.querySelectorAll('#navList .nav-btn').forEach(b => {
+  b.onclick = () => switchTab(b.dataset.tab);
+});
+
+async function loadMe() {
+  const r = await api('/api/wallet-portal/me');
+  if (!r.ok || !r.data.authenticated) {
+    $('loginView').style.display = 'flex';
+    $('appView').style.display = 'none';
+    return;
+  }
+  meData = r.data;
+  $('loginView').style.display = 'none';
+  $('appView').style.display = 'grid';
+
+  const stu = meData.student;
+  const w = meData.wallet;
+  $('sideWalletDid').textContent = w.did.slice(0, 26) + '…';
+  $('didPill').textContent = `Holder DID: ${w.did.slice(0, 24)}…`;
+  $('deviceDidBox').textContent = w.did;
+  $('stuName').textContent = stu.fullName;
+  $('stuMeta').textContent = `MSSV: ${stu.studentCode} · ${stu.className}`;
+  $('stuAuthBadge').textContent = meData.method === 'vneid' ? `Xác thực VNeID (${stu.nationalId})` : `SSO (${stu.email})`;
+
+  const claimableCount = (meData.issuerRecords || []).filter(x => x.status === 'APPROVED').length;
+  $('navClaimBadge').textContent = claimableCount;
+
+  renderLocalCredentials(w.credentials || []);
+  renderIssuerRecords(meData.issuerRecords || [], w.credentials || []);
+  renderHistory(w.history || []);
+}
+
+$('btnRefreshMe').onclick = loadMe;
+
+function renderLocalCredentials(creds) {
+  const sel = $('presentCredSel');
+  sel.innerHTML = creds.map(c => {
+    const title = c.type.includes('CourseCertificateCredential')
+      ? `${c.subject?.courseName} (${c.subject?.courseCode})`
+      : `${c.subject?.degreeName} — ${c.subject?.major}`;
+    return `<option value="${esc(c.id)}">${esc(title)} · Index #${esc(c.statusListIndex ?? '?')}</option>`;
+  }).join('') || '<option value="">— Ví chưa có văn bằng nào —</option>';
+
+  if (!creds.length) {
+    $('localVcList').innerHTML = `
+      <div class="empty-state">
+        Ví trên thiết bị này hiện đang trống.<br>
+        Hãy bấm <b>"Ký PoP &amp; Nhận vào Ví"</b> ở cột bên phải (hoặc bấm <b>"+ Cấp nhanh VC mẫu"</b> ở góc trên) để tải văn bằng về Ví.
+      </div>`;
+    return;
+  }
+
+  $('localVcList').innerHTML = creds.map(c => {
+    const isCourse = c.type.includes('CourseCertificateCredential');
+    const badge = isCourse ? 'COURSE CERTIFICATE CREDENTIAL' : (c.hasLegacy ? 'LEGACY REISSUED DEGREE CREDENTIAL' : 'UNIVERSITY DEGREE CREDENTIAL');
+    const title = isCourse ? `${c.subject?.courseName} (${c.subject?.courseCode})` : `${c.subject?.degreeName} — ${c.subject?.major}`;
+    return `
+      <div class="vc-pass mb-12">
+        <div class="vc-pass-header">
+          <span>${esc(badge)}</span>
+          <span>statusListIndex: #${esc(c.statusListIndex ?? '–')}</span>
+        </div>
+        <div class="vc-pass-title">${esc(title)}</div>
+        <div class="vc-pass-sub">${esc(c.subject?.studentName)} · ${isCourse ? 'Grade: ' + esc(c.subject?.grade) : 'GPA: ' + esc(c.subject?.gpa || '–') + ' (' + esc(c.subject?.classification || '') + ')'}</div>
+        <div class="vc-pass-footer">
+          <span>ecdsa-sd-2023 · P-256</span>
+          <div class="row">
+            <button class="btn-sm btn-secondary" onclick="inspectVc('${esc(c.id)}')">Xem JSON-LD</button>
+            <button class="btn-sm btn-accent" onclick="goPresent('${esc(c.id)}')">Đi trình bày QR</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.inspectVc = async function(id) {
+  const r = await api('/api/wallet/credential/' + encodeURIComponent(id));
+  if (r.ok) $('vcJsonPre').textContent = JSON.stringify(r.data, null, 2);
+};
+
+window.goPresent = function(id) {
+  $('presentCredSel').value = id;
+  switchTab('scan-qr');
+};
+
+function renderIssuerRecords(records, localCreds) {
+  const localIds = new Set(localCreds.map(c => c.id));
+  if (!records.length) {
+    $('issuerRecordsBox').innerHTML = `<div class="muted">Chưa có hồ sơ văn bằng nào tại trường cho MSSV này.</div>`;
+    return;
+  }
+  $('issuerRecordsBox').innerHTML = records.map(r => {
+    const inWallet = localIds.has(r.id);
+    let actionHtml = '';
+    if (r.status === 'APPROVED') {
+      actionHtml = `<button class="btn-sm btn-accent" onclick="claimVc('${esc(r.id)}')">Ký PoP (OpenID4VCI) &amp; Nhận vào Ví</button>`;
+    } else if (r.status === 'ISSUED' && !inWallet) {
+      actionHtml = `<button class="btn-sm btn-danger" onclick="requestReissue('${esc(r.id)}')">Báo mất Ví cũ / Xin cấp lại vào DID mới</button>`;
+    } else if (r.status === 'ISSUED' && inWallet) {
+      actionHtml = `<span class="badge badge-success">Đã lưu trong Ví thiết bị này</span>`;
+    } else if (r.status === 'PENDING_APPROVAL') {
+      actionHtml = `<span class="badge badge-warn">Đang chờ Trưởng phòng Đào tạo ký duyệt</span>`;
+    } else if (r.status === 'REVOKED') {
+      actionHtml = `<span class="badge badge-danger">Đã thu hồi (${esc(r.revokeReason || '')})</span>`;
+    }
+    return `
+      <div class="record-row">
+        <div class="row-between">
+          <div>
+            <div class="record-row-title">${esc(r.title)}</div>
+            <div class="muted mono">Mã hồ sơ: ${esc(r.id.slice(0, 14))}… · Trạng thái: ${esc(r.status)}</div>
+          </div>
+          <div>${actionHtml}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.claimVc = async function(recordId) {
+  const r = await api('/api/wallet-portal/claim', {method: 'POST', body: {recordId}});
+  if (!r.ok) {
+    toast(r.data?.error || 'Không nhận được văn bằng', 'err');
+    return;
+  }
+  toast('Đã ký Proof-of-Possession (OpenID4VCI) và nhận văn bằng vào Ví!', 'ok');
+  $('vcJsonPre').textContent = JSON.stringify(r.data.credential, null, 2);
+  await loadMe();
+};
+
+window.requestReissue = async function(recordId) {
+  const reason = prompt('Nhập lý do yêu cầu cấp lại văn bằng (văn bằng cũ sẽ bị thu hồi trên Bitstring Status List sau khi Lãnh đạo duyệt):', 'Đổi điện thoại mới / Mất khóa thiết bị cũ');
+  if (!reason) return;
+  const r = await api('/api/wallet-portal/reissue', {method: 'POST', body: {recordId, reason}});
+  if (!r.ok) {
+    toast(r.data?.error || 'Không gửi được yêu cầu cấp lại', 'err');
+    return;
+  }
+  toast('Đã gửi yêu cầu cấp lại về Cổng Đào tạo! Hãy mở Web Nhà trường (:4001) bằng tài khoản Trưởng phòng để phê duyệt.', 'ok');
+  await loadMe();
+};
+
+$('btnQuickDemoVc').onclick = async () => {
+  if (!meData?.wallet?.did) return;
+  const iss = await api('/api/issuer/issue-degree', {
+    method: 'POST',
+    body: {
+      holderDid: meData.wallet.did,
+      subject: meData.student ? {
+        studentName: meData.student.fullName,
+        studentCode: meData.student.studentCode,
+        major: meData.student.major,
+        degreeName: meData.student.degreeName,
+        gpa: meData.student.gpa || '3.65',
+        classification: meData.student.classification || 'Xuất sắc'
+      } : undefined
+    }
+  });
+  if (!iss.ok) { toast('Không cấp nhanh được VC', 'err'); return; }
+  await api('/api/wallet/receive', {
+    method: 'POST',
+    body: {id: iss.data.recordId, credential: iss.data.credential}
+  });
+  toast('Đã nhận nhanh 1 Bằng tốt nghiệp vào Ví thiết bị!', 'ok');
+  await loadMe();
+};
+
+// ---- QR Scanning & Selective Disclosure Presentation ----
+function extractRequestUri(raw) {
+  const s = (raw || '').trim();
+  if (s.startsWith('openid4vp://')) {
+    try {
+      const u = new URL(s.replace('openid4vp://', 'http://placeholder/'));
+      return u.searchParams.get('request_uri') || s;
+    } catch {}
+  }
+  return s;
+}
+
+async function loadQrRequest(rawUri) {
+  const uri = extractRequestUri(rawUri);
+  if (!uri) { toast('Đường dẫn request_uri trống', 'err'); return; }
+  if (!$('presentCredSel').value) {
+    await $('btnQuickDemoVc').onclick();
+  }
+  const sc = await api('/api/wallet/scan', {method: 'POST', body: {request_uri: uri}});
+  if (!sc.ok) { toast(sc.data?.error || 'Không tải được yêu cầu OpenID4VP', 'err'); return; }
+  activeRequest = sc.data.request;
+  const credId = $('presentCredSel').value;
+  const pv = await api('/api/wallet/preview', {method: 'POST', body: {request: activeRequest, credentialId: credId}});
+  if (!pv.ok) { toast(pv.data?.error || 'Không tạo được bản xem trước', 'err'); return; }
+  activePreview = pv.data;
+
+  $('consentPanel').innerHTML = `
+    <div class="notice notice-info mb-12">
+      <div class="notice-title">Đơn vị yêu cầu: ${esc(activeRequest.verifier_name || 'Nhà tuyển dụng')}</div>
+      <div class="mono muted">client_id: ${esc(activeRequest.client_id)} · nonce: ${esc(activeRequest.nonce)}</div>
+    </div>
+
+    <div class="claim-group-title">1. Thuộc tính Bắt buộc (Mandatory Pointers)</div>
+    ${activePreview.mandatory.map(k => `
+      <div class="claim-row">
+        <label><input type="checkbox" checked disabled> ${esc(CLAIM_LABEL[k] || k)}</label>
+        <span class="badge badge-warn">Bắt buộc</span>
+      </div>
+    `).join('')}
+
+    <div class="claim-group-title">2. Thuộc tính Yêu cầu Tùy chọn (Bạn có quyền tích chọn hoặc bỏ chọn)</div>
+    ${activePreview.requestedOptional.map(k => `
+      <div class="claim-row">
+        <label><input type="checkbox" class="opt-claim" value="${esc(k)}" checked> <b>${esc(CLAIM_LABEL[k] || k)}</b></label>
+        <span class="badge badge-info">Tiết lộ chọn lọc</span>
+      </div>
+    `).join('') || '<div class="muted">Không yêu cầu thêm thuộc tính tùy chọn.</div>'}
+
+    <div class="claim-group-title">3. Thuộc tính Bảo mật (Được che giấu bằng ECDSA-SD-2023)</div>
+    ${activePreview.hidden.map(k => `
+      <div class="claim-row">
+        <span class="muted">${esc(CLAIM_LABEL[k] || k)}</span>
+        <span class="badge badge-neutral">Đã ẩn mật mã</span>
+      </div>
+    `).join('')}
+
+    <div class="btn-group btn-group--equal mt-16">
+      <button class="btn-accent" id="btnApprovePresent">Chấp thuận, Tạo Derived VC &amp; Ký Holder Binding</button>
+      <button class="btn-secondary" id="btnCancelPresent">Từ chối</button>
+    </div>
+  `;
+
+  $('btnCancelPresent').onclick = () => {
+    $('consentPanel').innerHTML = `<div class="empty-state">Bạn đã từ chối chia sẻ dữ liệu — không có gói tin nào được gửi đi.</div>`;
+  };
+
+  $('btnApprovePresent').onclick = async () => {
+    const approvedClaims = [...document.querySelectorAll('.opt-claim:checked')].map(i => i.value);
+    const r = await api('/api/wallet/present', {
+      method: 'POST',
+      body: {
+        request: activeRequest,
+        credentialId: $('presentCredSel').value,
+        consent: true,
+        approvedClaims,
+        submit: true
+      }
+    });
+    if (!r.ok) { toast(r.data?.error || 'Lỗi khi trình bày VP', 'err'); return; }
+    const subStatus = r.data.submitted?.status;
+    const verifiedOk = r.data.submitted?.body?.verified;
+    $('consentPanel').innerHTML = `
+      <div class="notice ${verifiedOk ? 'notice-success' : 'notice-danger'}">
+        <div class="notice-title">
+          ${verifiedOk ? 'Đã trình bày &amp; xác minh thành công 4/4 bước tại Cổng Tuyển dụng.' : `Cổng Tuyển dụng từ chối (HTTP ${subStatus}): ${esc(r.data.submitted?.body?.reason || '')}`}
+        </div>
+        <div class="mono muted mt-8">
+          Thời gian tạo Derived VC: <b>${r.data.deriveMs.toFixed(1)} ms</b> · Ký Holder Binding PoP: <b>${r.data.signMs.toFixed(1)} ms</b>
+        </div>
+      </div>
+    `;
+    toast(verifiedOk ? 'Đã gửi gói tin vp_token và xác minh thành công!' : 'Gói tin bị Cổng Tuyển dụng từ chối', verifiedOk ? 'ok' : 'err');
+    await loadMe();
+  };
+}
+
+$('btnLoadUri').onclick = () => loadQrRequest($('manualReqUri').value);
+
+$('btnSyncLatestQr').onclick = async () => {
+  const r = await api('/api/verifier/latest');
+  if (!r.ok) {
+    toast('Chưa có phiên QR nào trên Cổng Tuyển dụng. Hãy mở Web Tuyển dụng (:4002) và tạo yêu cầu trước.', 'err');
+    return;
+  }
+  $('manualReqUri').value = r.data.request_uri;
+  await loadQrRequest(r.data.request_uri);
+};
+
+$('btnStartCam').onclick = async () => {
+  if (!window.Html5Qrcode) { toast('Thư viện quét QR đang tải, vui lòng thử lại sau 1 giây', 'err'); return; }
+  try {
+    if (!qrScanner) qrScanner = new Html5Qrcode('qrReaderBox');
+    await qrScanner.start(
+      {facingMode: 'environment'},
+      {fps: 10, qrbox: {width: 220, height: 220}},
+      async decoded => {
+        try { await qrScanner.stop(); } catch {}
+        $('manualReqUri').value = decoded;
+        await loadQrRequest(decoded);
+      },
+      () => {}
+    );
+  } catch {
+    toast('Trình duyệt chặn Camera (chỉ cho phép trên HTTPS hoặc localhost). Hãy dùng nút "2. Chụp ảnh mã QR" hoặc "3. Đồng bộ phiên QR".', 'err');
+  }
+};
+
+$('qrFileInput').onchange = async e => {
+  const file = e.target.files?.[0];
+  if (!file || !window.Html5Qrcode) return;
+  try {
+    if (!qrScanner) qrScanner = new Html5Qrcode('qrReaderBox');
+    const decoded = await qrScanner.scanFile(file, true);
+    $('manualReqUri').value = decoded;
+    await loadQrRequest(decoded);
+  } catch {
+    toast('Không nhận diện được mã QR trong ảnh. Bạn có thể bấm nút "3. Đồng bộ ngay phiên QR đang mở".', 'err');
+  }
+};
+
+function renderHistory(items) {
+  $('historyBody').innerHTML = items.map(h => `
+    <tr>
+      <td class="mono">${new Date(h.at).toLocaleString()}</td>
+      <td><b>${esc(h.verifier)}</b></td>
+      <td>${(h.disclosedClaims || []).map(c => `<span class="badge badge-info">${esc(CLAIM_LABEL[c] || c)}</span>`).join(' ')}</td>
+      <td>${(h.hiddenClaims || []).map(c => `<span class="badge badge-neutral">${esc(CLAIM_LABEL[c] || c)}</span>`).join(' ')}</td>
+      <td class="mono">Derive: ${h.deriveMs?.toFixed(1)}ms · Sign: ${h.signMs?.toFixed(1)}ms</td>
+      <td>${h.status === 200 ? '<span class="badge badge-success">HTTP 200 OK</span>' : `<span class="badge badge-danger">HTTP ${esc(h.status || '–')}</span>`}</td>
+    </tr>
+  `).join('') || '<tr class="empty-row"><td colspan="6">Chưa có lịch sử trình bày văn bằng nào trong phiên này.</td></tr>';
+}
+
+// ---- Backup & Device Rotation ----
+$('btnExportBackup').onclick = async () => {
+  const passphrase = $('backupPass').value.trim();
+  const r = await api('/api/wallet-portal/backup/export', {method: 'POST', body: {passphrase}});
+  if (!r.ok) { toast(r.data?.error || 'Không xuất được bản sao lưu', 'err'); return; }
+  savedBackupBundle = r.data;
+  $('btnDownloadBackup').disabled = false;
+  $('backupPreviewPre').textContent = JSON.stringify(savedBackupBundle, null, 2);
+  toast('Đã mã hóa gói sao lưu Ví bằng AES-256-GCM + scrypt!', 'ok');
+};
+
+$('btnDownloadBackup').onclick = () => {
+  if (!savedBackupBundle) return;
+  const blob = new Blob([JSON.stringify(savedBackupBundle, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `vnu-wallet-backup-${Date.now()}.json`;
+  a.click();
+};
+
+$('restoreFileInput').onchange = async e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  try {
+    savedBackupBundle = JSON.parse(await f.text());
+    $('backupPreviewPre').textContent = JSON.stringify(savedBackupBundle, null, 2);
+    toast('Đã nạp tệp sao lưu .json. Hãy bấm "Giải mã & Khôi phục Ví".', 'ok');
+  } catch {
+    toast('Tệp JSON không hợp lệ', 'err');
+  }
+};
+
+$('btnRestoreBackup').onclick = async () => {
+  if (!savedBackupBundle) { toast('Hãy tạo bản sao lưu hoặc chọn tệp .json trước', 'err'); return; }
+  const passphrase = $('backupPass').value.trim();
+  const r = await api('/api/wallet-portal/backup/restore', {
+    method: 'POST',
+    body: {bundle: savedBackupBundle, passphrase}
+  });
+  if (!r.ok) { toast(r.data?.error || 'Giải mã thất bại (sai mật khẩu)', 'err'); return; }
+  toast(`Đã khôi phục thành công DID và ${r.data.count} văn bằng!`, 'ok');
+  await loadMe();
+};
+
+$('btnSimulateNewPhone').onclick = async () => {
+  const r = await api('/api/wallet-portal/device/rotate', {method: 'POST'});
+  if (!r.ok) return;
+  toast(`Đã chuyển sang thiết bị mới! Khóa DID mới: ${r.data.newDid.slice(0, 24)}…`, 'ok');
+  await loadMe();
+};
+
+loadMe();
+</script>
+</body>
+</html>

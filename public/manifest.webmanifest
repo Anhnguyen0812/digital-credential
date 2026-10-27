@@ -1,0 +1,8 @@
+{
+  "name": "VNU Digital Wallet – Ví chứng chỉ học tập số",
+  "short_name": "VNU Wallet",
+  "start_url": "/wallet.html",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#14304f"
+}

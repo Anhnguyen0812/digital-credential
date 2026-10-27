@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cổng Quản trị & Cấp phát Văn bằng Số — Trường ĐH Công nghệ (UET-VNU)</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/portal.css">
+</head>
+<body>
+
+<!-- Global Navigation Bar across all 3 Standalone Portals + Council Demo Bench -->
+<div class="global-bar">
+  <div class="global-bar-left">
+    <span class="global-pill">Kiến trúc 3 Miền Độc lập</span>
+    <span>Hệ thống Chứng chỉ Học tập Số W3C VC 2.0 &amp; ECDSA-SD-2023</span>
+  </div>
+  <nav class="global-nav">
+    <a href="/issuer.html" class="active">1. Web Nhà trường <span class="port-tag">:4001</span></a>
+    <a href="/wallet.html">2. Web Ví Sinh viên <span class="port-tag">:3000</span></a>
+    <a href="/verifier.html">3. Web Tuyển dụng <span class="port-tag">:4002</span></a>
+    <a href="/index.html">Bàn Demo Hội đồng &amp; Tấn công</a>
+  </nav>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="loginView" class="auth-screen">
+  <div class="auth-container">
+    <div class="auth-form-col">
+      <div class="auth-brand">
+        <div class="auth-logo">UET</div>
+        <div>
+          <h1>Cổng Quản trị &amp; Cấp phát Văn bằng Số</h1>
+          <p>Trường Đại học Công nghệ — ĐHQGHN (did:web Issuer Portal)</p>
+        </div>
+      </div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label" for="inUser">Tên đăng nhập cán bộ</label>
+          <input type="text" id="inUser" value="truongphong" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inPass">Mật khẩu (Băm scrypt · Phiên HttpOnly)</label>
+          <input type="password" id="inPass" value="Demo@2026" required autocomplete="current-password">
+        </div>
+        <div id="loginErr" class="alert alert-danger mb-12" style="display:none"></div>
+        <button type="submit" class="btn-accent btn-block">Đăng nhập Hệ thống Đào tạo</button>
+      </form>
+
+      <div class="auth-note">
+        <b>Cơ chế bảo mật:</b> Mật khẩu được băm bằng <code>scrypt (N=16384, r=8, p=1)</code> trong PostgreSQL 16. Phiên đăng nhập lưu bằng cookie <code>HttpOnly; SameSite=Lax</code> và kiểm soát phân quyền RBAC + nguyên tắc 4 mắt (Separation of Duties) tại mọi API.
+      </div>
+    </div>
+
+    <div class="auth-demo-col">
+      <div>
+        <div class="auth-section-label">Chọn nhanh Tài khoản Demo (1-Click Login)</div>
+
+        <button type="button" class="demo-acc-card" data-u="truongphong" data-p="Demo@2026">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">PGS.TS Trần Văn Bình (truongphong)</span>
+            <span class="badge badge-info">APPROVER</span>
+          </div>
+          <div class="demo-acc-sub">Trưởng phòng Đào tạo — Quyền phê duyệt hồ sơ, đóng chữ ký số Multikey P-256 trên sổ gốc &amp; thu hồi văn bằng trên Bitstring Status List.</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-u="chuyenvien" data-p="Demo@2026">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Nguyễn Thị Hồng (chuyenvien)</span>
+            <span class="badge badge-warn">REGISTRAR</span>
+          </div>
+          <div class="demo-acc-sub">Chuyên viên Phòng Đào tạo — Quyền quản lý hồ sơ sinh viên, lập đề nghị cấp bằng &amp; nhập bản Scan sổ gốc 2.4MB (Không có quyền ký duyệt).</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-u="admin" data-p="Demo@2026">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Lê Minh Quân (admin)</span>
+            <span class="badge badge-purple">ADMIN</span>
+          </div>
+          <div class="demo-acc-sub">Quản trị hệ thống — Quyền quản lý tài khoản cán bộ, khóa/mở khóa tài khoản, đặt lại mật khẩu &amp; tra cứu Nhật ký Kiểm toán (Audit Log).</div>
+        </button>
+      </div>
+
+      <div class="muted mt-12">
+        Mật khẩu mặc định của tất cả tài khoản demo: <code class="mono">Demo@2026</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APPLICATION SHELL -->
+<div id="appView" class="app-shell" style="display:none">
+  <aside class="sidebar">
+    <div>
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">UET</div>
+        <div class="sidebar-brand-text">
+          <h2>Cổng Đào tạo UET</h2>
+          <p id="sideDid">did:web:localhost:4001</p>
+        </div>
+      </div>
+
+      <div class="nav-section-label">Nghiệp vụ Đào tạo</div>
+      <div class="nav-list" id="navList">
+        <button class="nav-btn active" data-tab="dashboard">
+          <span>Tổng quan Hệ thống</span>
+        </button>
+        <button class="nav-btn" data-tab="records">
+          <span>Hồ sơ Văn bằng &amp; Sổ gốc</span>
+          <span class="nav-badge" id="navPendingBadge">0</span>
+        </button>
+        <button class="nav-btn" data-tab="students">
+          <span>Sinh viên &amp; Cựu sinh viên</span>
+        </button>
+        <button class="nav-btn" data-tab="status">
+          <span>Bitstring &amp; Khóa Multikey</span>
+        </button>
+        <button class="nav-btn" data-tab="audit">
+          <span>Nhật ký Kiểm toán (Audit)</span>
+        </button>
+        <button class="nav-btn" data-tab="users">
+          <span>Quản trị Tài khoản (RBAC)</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="sidebar-user-card">
+        <div class="sidebar-user-name" id="uName">–</div>
+        <div class="sidebar-user-role" id="uRole">–</div>
+        <div class="mt-8">
+          <label class="field-label" for="quickSwitchUser">Chuyển nhanh tài khoản (Demo)</label>
+          <select id="quickSwitchUser">
+            <option value="truongphong">Trưởng phòng (APPROVER)</option>
+            <option value="chuyenvien">Chuyên viên (REGISTRAR)</option>
+            <option value="admin">Quản trị viên (ADMIN)</option>
+          </select>
+        </div>
+      </div>
+      <button id="btnLogout" class="btn-secondary btn-block">Đăng xuất phiên</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="page-header">
+      <div>
+        <h1 id="pageTitle">Tổng quan Hệ thống Cấp phát Văn bằng Số</h1>
+        <p id="pageSub">Theo dõi thời gian thực quy trình lập hồ sơ, ký duyệt 4 mắt (Separation of Duties) và thu hồi Bitstring</p>
+      </div>
+      <div class="row">
+        <span class="badge badge-info" id="topRoleBadge">–</span>
+        <button class="btn-secondary btn-sm" id="btnRefresh">Làm mới dữ liệu</button>
+      </div>
+    </header>
+
+    <main class="page-body">
+
+      <!-- TAB 1: DASHBOARD -->
+      <section id="tab-dashboard" class="tab-pane">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Tổng Sinh viên &amp; Cựu SV</span><span class="badge badge-neutral">CSDL</span></div>
+            <div class="kpi-value" id="kpiStudents">0</div>
+            <div class="kpi-sub" id="kpiStudentsSub">–</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Hồ sơ Chờ Lãnh đạo Duyệt</span><span class="badge badge-warn">4 Mắt</span></div>
+            <div class="kpi-value" id="kpiPending">0</div>
+            <div class="kpi-sub">Yêu cầu chữ ký Trưởng phòng Đào tạo</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Văn bằng Đã Duyệt / Phát hành</span><span class="badge badge-success">W3C VC 2.0</span></div>
+            <div class="kpi-value" id="kpiIssued">0</div>
+            <div class="kpi-sub" id="kpiIssuedSub">–</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Bitstring Status List</span><span class="badge badge-info">131.072 bits</span></div>
+            <div class="kpi-value" id="kpiRevoked">0</div>
+            <div class="kpi-sub" id="kpiStatusSub">–</div>
+          </div>
+        </div>
+
+        <div class="split split--wide-left">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Hồ sơ cần xử lý theo vai trò của bạn</h3>
+                <p class="card-sub">Nguyên tắc tách biệt nhiệm vụ: Người lập hồ sơ không được tự phê duyệt</p>
+              </div>
+              <button class="btn-sm btn-secondary" onclick="switchTab('records')">Xem tất cả hồ sơ →</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sinh viên</th>
+                    <th>Văn bằng / Chứng chỉ</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="todoBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Nhật ký Kiểm toán Gần đây</h3>
+                <p class="card-sub">Lưu vết bất biến trong PostgreSQL 16 (Không lưu PII nhạy cảm)</p>
+              </div>
+            </div>
+            <div class="card-body scroll-y-300" id="recentAuditBox"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: RECORDS -->
+      <section id="tab-records" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Quản lý Hồ sơ Văn bằng, Chứng chỉ &amp; Số hóa Sổ gốc</h3>
+              <p class="card-sub">Quy trình chuẩn: Chuyên viên lập đề nghị / nhập Scan 2.4MB → Trưởng phòng ký duyệt → Sinh viên ký PoP nhận vào Ví</p>
+            </div>
+            <div class="row">
+              <button id="btnOpenCreateRec" class="btn-accent">+ Lập đề nghị cấp văn bằng</button>
+              <button id="btnOpenLegacyRec" class="btn-secondary">+ Số hóa Sổ gốc lịch sử (Scan 2.4MB)</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <input type="text" id="recSearch" class="w-260" placeholder="Tìm theo MSSV, Họ tên, Tên văn bằng…">
+                <select id="recStatusFilter" class="w-190">
+                  <option value="">— Tất cả trạng thái —</option>
+                  <option value="PENDING_APPROVAL">Chờ lãnh đạo duyệt (PENDING)</option>
+                  <option value="APPROVED">Đã duyệt — Chờ SV nhận (APPROVED)</option>
+                  <option value="ISSUED">Đã phát hành vào Ví (ISSUED)</option>
+                  <option value="REVOKED">Đã thu hồi (REVOKED)</option>
+                  <option value="REJECTED">Bị từ chối (REJECTED)</option>
+                </select>
+                <select id="recKindFilter" class="w-180">
+                  <option value="">— Tất cả loại bằng —</option>
+                  <option value="degree">Bằng tốt nghiệp đại học</option>
+                  <option value="course">Chứng chỉ học phần</option>
+                  <option value="legacy_degree">Bằng số hóa từ sổ gốc</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Mã HS</th>
+                    <th>Sinh viên</th>
+                    <th>Loại</th>
+                    <th>Tên văn bằng / Chứng chỉ</th>
+                    <th>Người lập</th>
+                    <th>Trạng thái</th>
+                    <th>Index</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="recordsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: STUDENTS -->
+      <section id="tab-students" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Danh sách Sinh viên &amp; Cựu sinh viên</h3>
+              <p class="card-sub">Hỗ trợ xác thực SSO Email trường (@vnu.edu.vn) cho SV đang học và VNeID (Số CCCD) cho Cựu SV đã thu hồi email</p>
+            </div>
+            <button id="btnOpenAddStudent" class="btn-accent">+ Thêm hồ sơ sinh viên</button>
+          </div>
+          <div class="card-body">
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <input type="text" id="stuSearch" class="w-280" placeholder="Tìm theo MSSV, Họ tên, Lớp, Email…">
+                <select id="stuStatusFilter" class="w-180">
+                  <option value="">— Tất cả trạng thái —</option>
+                  <option value="GRADUATED">Đã tốt nghiệp</option>
+                  <option value="STUDYING">Đang theo học</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>MSSV</th>
+                    <th>Họ và tên</th>
+                    <th>Lớp / Khóa</th>
+                    <th>Ngành / Văn bằng</th>
+                    <th>GPA / Xếp loại</th>
+                    <th>Phương thức Định danh Ví</th>
+                    <th>Trạng thái</th>
+                    <th>Văn bằng</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="studentsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: BITSTRING & MULTIKEY -->
+      <section id="tab-status" class="tab-pane" style="display:none">
+        <div class="split">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Cấu hình Định danh Trường (did:web) &amp; Khóa Multikey P-256</h3>
+                <p class="card-sub">Tách biệt khóa ký văn bằng (issuer-key-1) và khóa phê duyệt sổ gốc (approver-key-1)</p>
+              </div>
+            </div>
+            <div class="card-body" id="cryptoConfigBox"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">W3C Bitstring Status List v1.0</h3>
+                <p class="card-sub">Mảng 131.072 bit nén GZIP + Multibase base64url hỗ trợ HTTP ETag 304</p>
+              </div>
+            </div>
+            <div class="card-body" id="statusListDetailBox"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Tài liệu DID Document Công khai (/.well-known/did.json)</h3>
+          </div>
+          <div class="card-body">
+            <pre class="code-block" id="didDocPre">Đang tải…</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: AUDIT LOG -->
+      <section id="tab-audit" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Nhật ký Kiểm toán Bảo mật (Immutable Audit Trail)</h3>
+              <p class="card-sub">Ghi nhận mọi sự kiện đăng nhập, lập hồ sơ, ký duyệt, thu hồi, truy cập sổ gốc Watermark và từ chối phân quyền RBAC</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Thời gian</th>
+                  <th>Sự kiện (Event)</th>
+                  <th>Tác nhân (Actor)</th>
+                  <th>Chi tiết kỹ thuật (JSONB)</th>
+                </tr>
+              </thead>
+              <tbody id="auditBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: USERS RBAC -->
+      <section id="tab-users" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Quản trị Tài khoản Cán bộ &amp; Phân quyền RBAC</h3>
+              <p class="card-sub">Chỉ tài khoản Quản trị hệ thống (ADMIN) mới có quyền thêm cán bộ, khóa phiên hoặc đặt lại mật khẩu</p>
+            </div>
+            <button id="btnOpenAddUser" class="btn-accent">+ Tạo tài khoản cán bộ</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ và tên</th>
+                  <th>Chức vụ</th>
+                  <th>Email</th>
+                  <th>Vai trò RBAC</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- MODAL: CREATE RECORD -->
+<div class="modal-backdrop" id="modalCreateRec">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Lập đề nghị cấp Văn bằng / Chứng chỉ số</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalCreateRec')">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Chọn Sinh viên</label>
+        <select id="crStudent"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Loại chứng chỉ đề nghị cấp</label>
+        <select id="crKind">
+          <option value="degree">Bằng tốt nghiệp Đại học (DegreeCredential — yêu cầu SV đã tốt nghiệp)</option>
+          <option value="course">Chứng chỉ hoàn thành Học phần (CourseCertificateCredential)</option>
+        </select>
+      </div>
+      <div id="crCourseFields" style="display:none" class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Học phần</label>
+          <select id="crCourseCode"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Điểm chữ đạt được</label>
+          <select id="crGrade">
+            <option value="A+">A+ (Xuất sắc)</option>
+            <option value="A">A (Giỏi)</option>
+            <option value="B+">B+ (Khá giỏi)</option>
+            <option value="B">B (Khá)</option>
+            <option value="C+">C+</option>
+            <option value="C">C</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ghi chú tờ trình</label>
+        <input type="text" id="crNote" value="Đề nghị cấp văn bằng số theo quyết định công nhận tốt nghiệp">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modalCreateRec')">Hủy</button>
+      <button class="btn-accent" id="btnSubmitCreateRec">Gửi trình Lãnh đạo phê duyệt</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: LEGACY DIGITIZATION -->
+<div class="modal-backdrop" id="modalLegacyRec">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Số hóa Sổ gốc Văn bằng Lịch sử (Quy trình 2 bước)</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalLegacyRec')">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Chọn Cựu sinh viên đã tốt nghiệp</label>
+        <select id="lgStudent"></select>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Số sổ gốc lưu trữ (Registry Book No.)</label>
+          <input type="text" id="lgBook" value="BK-2015/0842">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Số hiệu văn bằng giấy (Degree Serial)</label>
+          <input type="text" id="lgSerial" value="B15-004921">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Ngày cấp trên sổ gốc</label>
+          <input type="date" id="lgDate" value="2015-06-25">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tệp Scan Sổ gốc (Để trống sẽ dùng mẫu 2.4MB)</label>
+          <input type="file" id="lgFile">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Biên bản đối chiếu vật lý</label>
+        <input type="text" id="lgNote" value="Đã đối chiếu khớp sổ gốc lưu trữ tại Kho Lưu trữ Phòng Đào tạo">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modalLegacyRec')">Hủy</button>
+      <button class="btn-accent" id="btnSubmitLegacyRec">Băm SHA-256 &amp; Chuyển Lãnh đạo Ký số</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: RECORD DETAIL & APPROVAL -->
+<div class="modal-backdrop" id="modalRecDetail">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="detTitle">Chi tiết Hồ sơ Văn bằng</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalRecDetail')">Đóng</button>
+    </div>
+    <div class="modal-body" id="detBody"></div>
+    <div class="modal-footer" id="detFooter"></div>
+  </div>
+</div>
+
+<!-- MODAL: ADD / EDIT STUDENT -->
+<div class="modal-backdrop" id="modalStudent">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="stuModalTitle">Thêm Hồ sơ Sinh viên</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalStudent')">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Mã sinh viên (8 chữ số)</label>
+          <input type="text" id="fStuCode" placeholder="23020999">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Họ và tên</label>
+          <input type="text" id="fStuName" placeholder="Nguyễn Văn A">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Email trường (@vnu.edu.vn)</label>
+          <input type="email" id="fStuEmail" placeholder="23020999@vnu.edu.vn">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Số CCCD (Định danh VNeID 12 số)</label>
+          <input type="text" id="fStuCccd" placeholder="001205009999">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Lớp quản lý</label>
+          <input type="text" id="fStuClass" value="K68-CNTT1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Khóa</label>
+          <input type="text" id="fStuCohort" value="K68">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Ngành đào tạo</label>
+          <input type="text" id="fStuMajor" value="Công nghệ thông tin">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tên văn bằng</label>
+          <input type="text" id="fStuDegree" value="Cử nhân Công nghệ thông tin">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Trạng thái học tập</label>
+          <select id="fStuStatus">
+            <option value="GRADUATED">Đã tốt nghiệp (GRADUATED)</option>
+            <option value="STUDYING">Đang theo học (STUDYING)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Trạng thái Email trường</label>
+          <select id="fStuEmailActive">
+            <option value="true">Đang hoạt động (Đăng nhập SSO)</option>
+            <option value="false">Đã thu hồi sau tốt nghiệp (Bắt buộc dùng VNeID)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Điểm GPA (Hệ 4.0)</label>
+          <input type="number" step="0.01" id="fStuGpa" value="3.60">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Xếp loại tốt nghiệp</label>
+          <select id="fStuClassif">
+            <option value="Xuất sắc">Xuất sắc</option>
+            <option value="Giỏi">Giỏi</option>
+            <option value="Khá">Khá</option>
+            <option value="Trung bình">Trung bình</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ngày công nhận tốt nghiệp</label>
+        <input type="date" id="fStuGradDate" value="2026-06-30">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modalStudent')">Hủy</button>
+      <button class="btn-accent" id="btnSaveStudent">Lưu hồ sơ sinh viên</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD STAFF USER -->
+<div class="modal-backdrop" id="modalUser">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Tạo tài khoản Cán bộ mới (RBAC)</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalUser')">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Tên đăng nhập</label>
+          <input type="text" id="uNewUsername" placeholder="chuyenvien02">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Họ và tên</label>
+          <input type="text" id="uNewFullName" placeholder="Phạm Văn C">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Email công vụ</label>
+          <input type="email" id="uNewEmail" placeholder="cpv@vnu.edu.vn">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vai trò phân quyền (RBAC)</label>
+          <select id="uNewRole">
+            <option value="REGISTRAR">REGISTRAR — Chuyên viên Đào tạo</option>
+            <option value="APPROVER">APPROVER — Lãnh đạo Phê duyệt</option>
+            <option value="ADMIN">ADMIN — Quản trị hệ thống</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Chức danh</label>
+          <input type="text" id="uNewTitle" value="Chuyên viên Phòng Đào tạo">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mật khẩu khởi tạo (Tối thiểu 8 ký tự chữ &amp; số)</label>
+          <input type="password" id="uNewPass" value="Demo@2026">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modalUser')">Hủy</button>
+      <button class="btn-accent" id="btnSaveUser">Tạo tài khoản</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg, kind = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = msg;
+  $('toastBox').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+function openModal(id) { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
+    ...opts,
+    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
+  });
+  const data = await res.json().catch(() => ({}));
+  return {ok: res.ok, status: res.status, data};
+}
+
+const STATUS_BADGE = {
+  PENDING_APPROVAL: '<span class="badge badge-warn">Chờ Lãnh đạo duyệt</span>',
+  APPROVED: '<span class="badge badge-info">Đã duyệt (Chờ SV nhận)</span>',
+  ISSUED: '<span class="badge badge-success">Đã phát hành vào Ví</span>',
+  REVOKED: '<span class="badge badge-danger">Đã thu hồi (Bit=1)</span>',
+  REJECTED: '<span class="badge badge-danger">Từ chối duyệt</span>',
+  CANCELLED: '<span class="badge badge-neutral">Đã hủy</span>'
+};
+
+const KIND_LABEL = {
+  degree: 'Bằng tốt nghiệp ĐH',
+  course: 'Chứng chỉ học phần',
+  legacy_degree: 'Bằng số hóa Sổ gốc'
+};
+
+let currentUser = null, permissions = [], cachedStudents = [], cachedCourses = [], editingStudentCode = null;
+
+async function checkSession() {
+  const r = await api('/api/portal/auth/me');
+  if (!r.ok) {
+    $('loginView').style.display = 'flex';
+    $('appView').style.display = 'none';
+    return;
+  }
+  currentUser = r.data.user;
+  permissions = r.data.permissions || [];
+  $('sideDid').textContent = r.data.issuerDid;
+  $('uName').textContent = currentUser.fullName;
+  $('uRole').textContent = `${currentUser.title} (${currentUser.role})`;
+  $('topRoleBadge').textContent = `${currentUser.fullName} · ${currentUser.role}`;
+  $('quickSwitchUser').value = currentUser.username;
+
+  $('loginView').style.display = 'none';
+  $('appView').style.display = 'grid';
+
+  const cat = await api('/api/portal/catalog');
+  if (cat.ok) cachedCourses = cat.data.courses || [];
+
+  await refreshAll();
+}
+
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  $('loginErr').style.display = 'none';
+  const r = await api('/api/portal/auth/login', {
+    method: 'POST',
+    body: {username: $('inUser').value.trim(), password: $('inPass').value}
+  });
+  if (!r.ok) {
+    $('loginErr').textContent = r.data?.error || 'Đăng nhập thất bại';
+    $('loginErr').style.display = 'block';
+    return;
+  }
+  toast(`Xin chào ${r.data.user.fullName} (${r.data.user.role})`, 'ok');
+  await checkSession();
+};
+
+document.querySelectorAll('.demo-acc-card').forEach(btn => {
+  btn.onclick = () => {
+    $('inUser').value = btn.dataset.u;
+    $('inPass').value = btn.dataset.p;
+    $('loginForm').requestSubmit();
+  };
+});
+
+$('quickSwitchUser').onchange = async () => {
+  const u = $('quickSwitchUser').value;
+  const r = await api('/api/portal/auth/login', {
+    method: 'POST',
+    body: {username: u, password: 'Demo@2026'}
+  });
+  if (r.ok) {
+    toast(`Đã chuyển sang phiên: ${r.data.user.fullName} (${r.data.user.role})`, 'ok');
+    await checkSession();
+  } else {
+    toast(r.data?.error || 'Không chuyển được tài khoản', 'err');
+  }
+};
+
+$('btnLogout').onclick = async () => {
+  await api('/api/portal/auth/logout', {method: 'POST'});
+  toast('Đã đăng xuất phiên làm việc');
+  checkSession();
+};
+
+function switchTab(tab) {
+  document.querySelectorAll('#navList .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-pane').forEach(p => p.style.display = p.id === `tab-${tab}` ? 'block' : 'none');
+  if (tab === 'dashboard') loadDashboard();
+  if (tab === 'records') loadRecords();
+  if (tab === 'students') loadStudents();
+  if (tab === 'status') loadStatusList();
+  if (tab === 'audit') loadAudit();
+  if (tab === 'users') loadUsers();
+}
+
+document.querySelectorAll('#navList .nav-btn').forEach(b => {
+  b.onclick = () => switchTab(b.dataset.tab);
+});
+
+$('btnRefresh').onclick = () => refreshAll();
+
+async function refreshAll() {
+  await Promise.all([loadDashboard(), loadRecords(), loadStudents()]);
+}
+
+async function loadDashboard() {
+  const r = await api('/api/portal/dashboard');
+  if (!r.ok) return;
+  const d = r.data;
+  const pendingCount = d.records.byStatus?.PENDING_APPROVAL || 0;
+  const issuedCount = (d.records.byStatus?.ISSUED || 0) + (d.records.byStatus?.APPROVED || 0);
+  $('navPendingBadge').textContent = pendingCount;
+  $('kpiStudents').textContent = d.students.total;
+  $('kpiStudentsSub').textContent = `${d.students.graduated} đã tốt nghiệp · ${d.students.studying} đang học`;
+  $('kpiPending').textContent = pendingCount;
+  $('kpiIssued').textContent = issuedCount;
+  $('kpiIssuedSub').textContent = `${d.records.byStatus?.ISSUED || 0} đã nhận vào Ví · ${d.records.byStatus?.APPROVED || 0} chờ SV nhận`;
+  $('kpiRevoked').textContent = d.statusList.revoked;
+  $('kpiStatusSub').textContent = `Đã cấp phát ${d.statusList.allocated} / ${d.statusList.capacity.toLocaleString()} vị trí bit`;
+
+  $('todoBody').innerHTML = (d.todo || []).map(x => `
+    <tr>
+      <td><b>${esc(x.studentName)}</b><div class="muted mono">${esc(x.studentCode)}</div></td>
+      <td>${esc(x.title)}<div class="muted">${KIND_LABEL[x.kind] || x.kind}</div></td>
+      <td>${STATUS_BADGE[x.status] || x.status}</td>
+      <td><button class="btn-sm btn-secondary" onclick="openRecordDetail('${esc(x.id)}')">Chi tiết / Xử lý</button></td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="4">Không có hồ sơ tồn đọng cần xử lý cho vai trò <b>${esc(currentUser.role)}</b>.</td></tr>`;
+
+  $('recentAuditBox').innerHTML = (d.recent || []).map(a => `
+    <div class="audit-item">
+      <div class="audit-item-head">
+        <span class="mono audit-event">${esc(a.event)}</span>
+        <span class="muted mono">${new Date(a.at).toLocaleTimeString()}</span>
+      </div>
+      <div class="muted">Actor: <b>${esc(a.detail?.actor || 'system')}</b> · ${esc(JSON.stringify(a.detail).slice(0, 80))}</div>
+    </div>
+  `).join('') || '<div class="muted">Chưa có sự kiện nào.</div>';
+}
+
+async function loadRecords() {
+  const q = $('recSearch').value.trim();
+  const st = $('recStatusFilter').value;
+  const kd = $('recKindFilter').value;
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (st) params.set('status', st);
+  if (kd) params.set('kind', kd);
+  const r = await api('/api/portal/records?' + params.toString());
+  if (!r.ok) return;
+  $('recordsBody').innerHTML = (r.data.items || []).map(x => `
+    <tr>
+      <td class="mono nowrap">${esc(x.id.slice(0, 10))}…</td>
+      <td><b>${esc(x.studentName)}</b><div class="muted mono">${esc(x.studentCode)}</div></td>
+      <td><span class="badge badge-neutral">${esc(KIND_LABEL[x.kind] || x.kind)}</span></td>
+      <td><b>${esc(x.title)}</b>${x.reissueOf ? '<div class="muted">Yêu cầu cấp lại</div>' : ''}</td>
+      <td class="mono">${esc(x.createdBy)}</td>
+      <td>${STATUS_BADGE[x.status] || x.status}</td>
+      <td class="mono">${x.statusListIndex !== undefined ? '#' + x.statusListIndex : '–'}</td>
+      <td>
+        <button class="btn-sm btn-secondary" onclick="openRecordDetail('${esc(x.id)}')">Xem / Duyệt</button>
+      </td>
+    </tr>
+  `).join('') || '<tr class="empty-row"><td colspan="8">Không tìm thấy hồ sơ nào.</td></tr>';
+}
+
+$('recSearch').oninput = loadRecords;
+$('recStatusFilter').onchange = loadRecords;
+$('recKindFilter').onchange = loadRecords;
+
+window.openRecordDetail = async function(id) {
+  const r = await api('/api/portal/records/' + encodeURIComponent(id));
+  if (!r.ok) { toast(r.data?.error || 'Không tải được hồ sơ', 'err'); return; }
+  const rec = r.data.record;
+  $('detTitle').textContent = `Hồ sơ: ${rec.title} (${rec.studentName})`;
+  $('detBody').innerHTML = `
+    <div class="detail-grid">
+      <div><span class="muted">Sinh viên:</span> <b>${esc(rec.studentName)} (${esc(rec.studentCode)})</b></div>
+      <div><span class="muted">Trạng thái:</span> ${STATUS_BADGE[rec.status] || rec.status}</div>
+      <div><span class="muted">Người lập đề nghị:</span> <span class="mono">${esc(rec.createdBy)}</span></div>
+      <div><span class="muted">Người ký phê duyệt:</span> <span class="mono">${esc(rec.approvedBy || 'Chưa duyệt')}</span></div>
+      <div><span class="muted">Holder DID nhận bằng:</span> <span class="mono">${esc(rec.holderDid ? rec.holderDid.slice(0, 32) + '…' : 'Chưa nhận vào Ví')}</span></div>
+      <div><span class="muted">Vị trí Bitstring:</span> <span class="mono">${rec.statusListIndex !== undefined ? 'Index #' + rec.statusListIndex : 'Chưa cấp phát'}</span></div>
+    </div>
+
+    ${rec.legacy ? `
+      <div class="notice notice-warn mb-12">
+        <div class="notice-title">Thông tin Sổ gốc Lưu trữ (Legacy Digitization)</div>
+        <div>Số sổ gốc: <b>${esc(rec.legacy.registryBookNumber)}</b> · Số hiệu bằng: <b>${esc(rec.legacy.degreeSerial)}</b> · Ngày cấp gốc: <b>${esc(rec.legacy.originalIssueDate)}</b></div>
+        <div class="mono muted mt-8">SHA-256 Digest: ${esc(rec.legacy.digest)} (${rec.legacy.scanBytes.toLocaleString()} bytes)</div>
+        ${rec.provenance ? `<div class="mono text-success mt-8">Chữ ký số Lãnh đạo (approverSignature): ${esc(rec.provenance.approverSignature.slice(0, 48))}…</div>` : ''}
+      </div>
+    ` : ''}
+
+    <div class="section-label">Lịch sử Phê duyệt &amp; Kiểm soát 4 Mắt</div>
+    <div class="record-history">
+      ${(rec.history || []).map(h => `
+        <div class="history-item">
+          <span class="mono muted">[${new Date(h.at).toLocaleString()}]</span>
+          <b>${esc(h.actor)}</b> → <span class="badge badge-neutral">${esc(h.action)}</span>
+          ${h.note ? `<span>${esc(h.note)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="section-label">Dữ liệu Thuộc tính Văn bằng (credentialSubject)</div>
+    <pre class="code-block">${esc(JSON.stringify(rec.credential || rec.subject, null, 2))}</pre>
+  `;
+
+  let buttons = `<button class="btn-secondary" onclick="closeModal('modalRecDetail')">Đóng</button>`;
+  if (rec.status === 'PENDING_APPROVAL') {
+    buttons = `
+      <button class="btn-danger" onclick="rejectRecord('${esc(rec.id)}')">Từ chối hồ sơ</button>
+      <button class="btn-accent" onclick="approveRecord('${esc(rec.id)}')">Phê duyệt &amp; Đóng chữ ký số (APPROVER)</button>
+    ` + buttons;
+  } else if (rec.status === 'ISSUED' || rec.status === 'APPROVED') {
+    buttons = `
+      <button class="btn-danger" onclick="revokeRecordPrompt('${esc(rec.id)}')">Thu hồi văn bằng (Bật Bit = 1)</button>
+    ` + buttons;
+  }
+  $('detFooter').innerHTML = buttons;
+  openModal('modalRecDetail');
+};
+
+window.approveRecord = async function(id) {
+  const r = await api(`/api/portal/records/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    body: {note: 'Đã kiểm tra đối chiếu và ký duyệt phát hành'}
+  });
+  if (!r.ok) {
+    toast(r.data?.error || 'Lỗi phân quyền RBAC', 'err');
+    return;
+  }
+  toast('Đã phê duyệt hồ sơ! Sinh viên có thể mở Ví để ký PoP nhận văn bằng.', 'ok');
+  closeModal('modalRecDetail');
+  await refreshAll();
+};
+
+window.rejectRecord = async function(id) {
+  const reason = prompt('Nhập lý do từ chối hồ sơ:', 'Thông tin cần bổ sung quyết định tốt nghiệp');
+  if (!reason) return;
+  const r = await api(`/api/portal/records/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: {reason}
+  });
+  if (!r.ok) { toast(r.data?.error || 'Không thể từ chối', 'err'); return; }
+  toast('Đã từ chối hồ sơ', 'ok');
+  closeModal('modalRecDetail');
+  await refreshAll();
+};
+
+window.revokeRecordPrompt = async function(id) {
+  const reason = prompt('Nhập lý do thu hồi văn bằng trên Bitstring Status List:', 'Thu hồi theo quyết định thanh tra / cấp lại văn bằng');
+  if (!reason) return;
+  const r = await api(`/api/portal/records/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+    body: {reason}
+  });
+  if (!r.ok) { toast(r.data?.error || 'Lỗi phân quyền RBAC khi thu hồi', 'err'); return; }
+  toast('Đã thu hồi văn bằng và cập nhật ETag Bitstring Status List!', 'ok');
+  closeModal('modalRecDetail');
+  await refreshAll();
+};
+
+// Create Record Modal
+$('btnOpenCreateRec').onclick = async () => {
+  if (!cachedStudents.length) await loadStudents();
+  $('crStudent').innerHTML = cachedStudents.map(s =>
+    `<option value="${esc(s.studentCode)}">${esc(s.studentCode)} — ${esc(s.fullName)} (${s.status === 'GRADUATED' ? 'Đã tốt nghiệp · GPA ' + (s.gpa || '') : 'Đang học'})</option>`
+  ).join('');
+  $('crCourseCode').innerHTML = cachedCourses.map(c =>
+    `<option value="${esc(c.courseCode)}">${esc(c.courseCode)} — ${esc(c.courseName)}</option>`
+  ).join('');
+  openModal('modalCreateRec');
+};
+
+$('crKind').onchange = () => {
+  $('crCourseFields').style.display = $('crKind').value === 'course' ? 'grid' : 'none';
+};
+
+$('btnSubmitCreateRec').onclick = async () => {
+  const kind = $('crKind').value;
+  const body = {
+    studentCode: $('crStudent').value,
+    kind,
+    courseCode: kind === 'course' ? $('crCourseCode').value : undefined,
+    grade: kind === 'course' ? $('crGrade').value : undefined,
+    note: $('crNote').value
+  };
+  const r = await api('/api/portal/records', {method: 'POST', body});
+  if (!r.ok) { toast(r.data?.error || 'Không lập được đề nghị', 'err'); return; }
+  toast('Đã lập hồ sơ đề nghị cấp văn bằng (Trạng thái: Chờ Lãnh đạo duyệt)', 'ok');
+  closeModal('modalCreateRec');
+  await refreshAll();
+};
+
+// Legacy Digitization Modal
+$('btnOpenLegacyRec').onclick = async () => {
+  if (!cachedStudents.length) await loadStudents();
+  const grads = cachedStudents.filter(s => s.status === 'GRADUATED');
+  $('lgStudent').innerHTML = grads.map(s =>
+    `<option value="${esc(s.studentCode)}" ${s.studentCode === '12020876' ? 'selected' : ''}>${esc(s.studentCode)} — ${esc(s.fullName)} (${esc(s.cohort)})</option>`
+  ).join('');
+  openModal('modalLegacyRec');
+};
+
+$('btnSubmitLegacyRec').onclick = async () => {
+  let scanBase64, scanName;
+  const f = $('lgFile').files?.[0];
+  if (f) {
+    scanName = f.name;
+    const buf = await f.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    scanBase64 = btoa(binary);
+  }
+  const r = await api('/api/portal/records/legacy', {
+    method: 'POST',
+    body: {
+      studentCode: $('lgStudent').value,
+      registryBookNumber: $('lgBook').value,
+      degreeSerial: $('lgSerial').value,
+      originalIssueDate: $('lgDate').value,
+      note: $('lgNote').value,
+      scanBase64,
+      scanName
+    }
+  });
+  if (!r.ok) { toast(r.data?.error || 'Không nhập được hồ sơ sổ gốc', 'err'); return; }
+  toast('Đã băm SHA-256 bản Scan sổ gốc và chuyển sang chờ Trưởng phòng ký số!', 'ok');
+  closeModal('modalLegacyRec');
+  await refreshAll();
+};
+
+// Students Tab
+async function loadStudents() {
+  const q = $('stuSearch')?.value?.trim() || '';
+  const st = $('stuStatusFilter')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (st) params.set('status', st);
+  const r = await api('/api/portal/students?' + params.toString());
+  if (!r.ok) return;
+  cachedStudents = r.data.items || [];
+  $('studentsBody').innerHTML = cachedStudents.map(s => `
+    <tr>
+      <td class="mono"><b>${esc(s.studentCode)}</b></td>
+      <td><b>${esc(s.fullName)}</b><div class="muted">${esc(s.email)}</div></td>
+      <td>${esc(s.className)} · ${esc(s.cohort)}</td>
+      <td>${esc(s.major)}<div class="muted">${esc(s.degreeName)}</div></td>
+      <td>${s.gpa ? `<b>${esc(s.gpa)}</b> (${esc(s.classification || '')})` : '<span class="muted">Chưa xét</span>'}</td>
+      <td>
+        ${s.emailActive
+          ? `<span class="badge badge-info">SSO @vnu.edu.vn</span>`
+          : `<span class="badge badge-warn">Email đã thu hồi → VNeID (${esc(s.nationalId)})</span>`}
+      </td>
+      <td>${s.status === 'GRADUATED' ? '<span class="badge badge-success">Đã tốt nghiệp</span>' : '<span class="badge badge-neutral">Đang học</span>'}</td>
+      <td><span class="badge badge-purple">${s.credentialCount || 0} VC</span></td>
+      <td><button class="btn-sm btn-secondary" onclick="openEditStudent('${esc(s.studentCode)}')">Sửa</button></td>
+    </tr>
+  `).join('');
+}
+
+$('stuSearch').oninput = loadStudents;
+$('stuStatusFilter').onchange = loadStudents;
+
+$('btnOpenAddStudent').onclick = () => {
+  editingStudentCode = null;
+  $('stuModalTitle').textContent = 'Thêm Hồ sơ Sinh viên mới';
+  $('fStuCode').disabled = false;
+  $('fStuCode').value = '23020888';
+  $('fStuName').value = '';
+  $('fStuEmail').value = '23020888@vnu.edu.vn';
+  $('fStuCccd').value = '001205008888';
+  openModal('modalStudent');
+};
+
+window.openEditStudent = function(code) {
+  const s = cachedStudents.find(x => x.studentCode === code);
+  if (!s) return;
+  editingStudentCode = code;
+  $('stuModalTitle').textContent = `Cập nhật Sinh viên: ${s.fullName} (${s.studentCode})`;
+  $('fStuCode').disabled = true;
+  $('fStuCode').value = s.studentCode;
+  $('fStuName').value = s.fullName;
+  $('fStuEmail').value = s.email;
+  $('fStuCccd').value = s.nationalId;
+  $('fStuClass').value = s.className || '';
+  $('fStuCohort').value = s.cohort || '';
+  $('fStuMajor').value = s.major || '';
+  $('fStuDegree').value = s.degreeName || '';
+  $('fStuStatus').value = s.status;
+  $('fStuEmailActive').value = String(s.emailActive);
+  $('fStuGpa').value = s.gpa || '';
+  $('fStuClassif').value = s.classification || 'Giỏi';
+  $('fStuGradDate').value = s.graduationDate || '2026-06-30';
+  openModal('modalStudent');
+};
+
+$('btnSaveStudent').onclick = async () => {
+  const payload = {
+    studentCode: $('fStuCode').value.trim(),
+    fullName: $('fStuName').value.trim(),
+    email: $('fStuEmail').value.trim(),
+    nationalId: $('fStuCccd').value.trim(),
+    className: $('fStuClass').value.trim(),
+    cohort: $('fStuCohort').value.trim(),
+    major: $('fStuMajor').value.trim(),
+    degreeName: $('fStuDegree').value.trim(),
+    status: $('fStuStatus').value,
+    emailActive: $('fStuEmailActive').value === 'true',
+    gpa: $('fStuGpa').value ? $('fStuGpa').value : undefined,
+    classification: $('fStuClassif').value,
+    graduationDate: $('fStuGradDate').value || undefined
+  };
+  const r = editingStudentCode
+    ? await api('/api/portal/students/' + encodeURIComponent(editingStudentCode), {method: 'PUT', body: payload})
+    : await api('/api/portal/students', {method: 'POST', body: payload});
+  if (!r.ok) { toast(r.data?.error || 'Không lưu được hồ sơ sinh viên', 'err'); return; }
+  toast('Đã lưu thông tin sinh viên thành công!', 'ok');
+  closeModal('modalStudent');
+  await loadStudents();
+};
+
+async function loadStatusList() {
+  const [st, didDoc] = await Promise.all([
+    api('/api/portal/status-list'),
+    fetch('/.well-known/did.json').then(r => r.json())
+  ]);
+  if (st.ok) {
+    const d = st.data;
+    $('cryptoConfigBox').innerHTML = `
+      <div class="stack">
+        <div><span class="muted">Định danh Trường (Trust Anchor):</span><div class="mono"><b>${esc(d.issuerDid)}</b></div></div>
+        <div><span class="muted">Khóa ký Văn bằng ECDSA-SD-2023:</span><div class="mono">${esc(d.signingKey)}</div></div>
+        <div><span class="muted">Khóa ký Phê duyệt Sổ gốc (Lãnh đạo):</span><div class="mono">${esc(d.approverKey)}</div></div>
+      </div>
+    `;
+    $('statusListDetailBox').innerHTML = `
+      <div class="stack">
+        <div><span class="muted">URL Bitstring Status List:</span><div class="mono">${esc(d.url)}</div></div>
+        <div><span class="muted">HTTP ETag hiện tại:</span><div class="mono"><b>${esc(d.etag)}</b></div></div>
+        <div><span class="muted">Tổng dung lượng:</span> <b>${d.capacity.toLocaleString()} bits (16 KB)</b> — Đã cấp: <b>${d.allocated}</b> · Đã thu hồi: <b class="text-danger">${d.revoked}</b></div>
+      </div>
+    `;
+  }
+  $('didDocPre').textContent = JSON.stringify(didDoc, null, 2);
+}
+
+async function loadAudit() {
+  const r = await api('/api/portal/audit?limit=150');
+  if (!r.ok) {
+    $('auditBody').innerHTML = `<tr class="empty-row"><td colspan="5" class="text-danger">${esc(r.data?.error || 'Vai trò hiện tại không có quyền xem Audit Log')}</td></tr>`;
+    return;
+  }
+  $('auditBody').innerHTML = (r.data.items || []).map(a => `
+    <tr>
+      <td class="mono">#${esc(a.id)}</td>
+      <td class="mono">${new Date(a.at).toLocaleString()}</td>
+      <td><span class="badge ${a.event.includes('DENIED') || a.event.includes('FAILED') || a.event.includes('REVOKE') ? 'badge-danger' : 'badge-info'}">${esc(a.event)}</span></td>
+      <td class="mono"><b>${esc(a.detail?.actor || 'system')}</b></td>
+      <td class="mono">${esc(JSON.stringify(a.detail))}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadUsers() {
+  const r = await api('/api/portal/users');
+  if (!r.ok) {
+    $('usersBody').innerHTML = `<tr class="empty-row"><td colspan="7" class="text-danger">${esc(r.data?.error || 'Chỉ Quản trị hệ thống (ADMIN) mới có quyền quản lý tài khoản cán bộ')}</td></tr>`;
+    return;
+  }
+  $('usersBody').innerHTML = (r.data.items || []).map(u => `
+    <tr>
+      <td class="mono"><b>${esc(u.username)}</b></td>
+      <td><b>${esc(u.fullName)}</b></td>
+      <td>${esc(u.title)}</td>
+      <td>${esc(u.email)}</td>
+      <td><span class="badge badge-purple">${esc(u.role)}</span></td>
+      <td>${u.active ? '<span class="badge badge-success">Hoạt động</span>' : '<span class="badge badge-danger">Đã khóa</span>'}</td>
+      <td>
+        <button class="btn-sm btn-secondary" onclick="toggleUser('${esc(u.username)}')">${u.active ? 'Khóa TK' : 'Mở khóa'}</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+window.toggleUser = async function(username) {
+  const r = await api(`/api/portal/users/${encodeURIComponent(username)}/toggle`, {method: 'POST'});
+  if (!r.ok) { toast(r.data?.error || 'Không thay đổi được trạng thái', 'err'); return; }
+  toast(`Đã cập nhật trạng thái tài khoản ${username}`, 'ok');
+  loadUsers();
+};
+
+$('btnOpenAddUser').onclick = () => openModal('modalUser');
+$('btnSaveUser').onclick = async () => {
+  const r = await api('/api/portal/users', {
+    method: 'POST',
+    body: {
+      username: $('uNewUsername').value.trim(),
+      fullName: $('uNewFullName').value.trim(),
+      email: $('uNewEmail').value.trim(),
+      role: $('uNewRole').value,
+      title: $('uNewTitle').value.trim(),
+      password: $('uNewPass').value
+    }
+  });
+  if (!r.ok) { toast(r.data?.error || 'Không tạo được tài khoản', 'err'); return; }
+  toast('Đã tạo tài khoản cán bộ mới!', 'ok');
+  closeModal('modalUser');
+  loadUsers();
+};
+
+checkSession();
+</script>
+</body>
+</html>

@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cổng Xác minh Tuyển dụng Doanh nghiệp — OpenID4VP Relying Party</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/portal.css">
+</head>
+<body>
+
+<!-- Global Navigation Bar -->
+<div class="global-bar">
+  <div class="global-bar-left">
+    <span class="global-pill">OpenID4VP Relying Party</span>
+    <span>Cổng Xác minh Văn bằng Tuyển dụng Doanh nghiệp</span>
+  </div>
+  <nav class="global-nav">
+    <a href="/issuer.html">1. Web Nhà trường <span class="port-tag">:4001</span></a>
+    <a href="/wallet.html">2. Web Ví Sinh viên <span class="port-tag">:3000</span></a>
+    <a href="/verifier.html" class="active">3. Web Tuyển dụng <span class="port-tag">:4002</span></a>
+    <a href="/index.html">Bàn Demo Hội đồng &amp; Tấn công</a>
+  </nav>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="loginView" class="auth-screen">
+  <div class="auth-container">
+    <div class="auth-form-col">
+      <div class="auth-brand">
+        <div class="auth-logo">RP</div>
+        <div>
+          <h1>Cổng Xác minh Tuyển dụng Doanh nghiệp</h1>
+          <p>Xác minh tức thời văn bằng W3C VC 2.0 &amp; đối chiếu sổ gốc có Watermark động</p>
+        </div>
+      </div>
+
+      <form id="rpLoginForm">
+        <div class="form-group">
+          <label class="form-label" for="inRpUser">Tài khoản Nhân sự (HR Account)</label>
+          <input type="text" id="inRpUser" value="hr.fpt" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inRpPass">Mật khẩu (Băm scrypt · Phiên HttpOnly)</label>
+          <input type="password" id="inRpPass" value="Demo@2026" required>
+        </div>
+        <div id="rpLoginErr" class="alert alert-danger mb-12" style="display:none"></div>
+        <button type="submit" class="btn-accent btn-block">Đăng nhập Cổng Tuyển dụng</button>
+      </form>
+
+      <div class="auth-note">
+        <b>Định danh Doanh nghiệp &amp; Watermark:</b> Tên đơn vị tuyển dụng đăng nhập sẽ được gắn vào <code>Verification Receipt Token</code> và đóng dấu mờ động (Dynamic SVG Watermark) khi đối chiếu bản Scan Sổ gốc tại Trường.
+      </div>
+    </div>
+
+    <div class="auth-demo-col">
+      <div>
+        <div class="auth-section-label">Chọn Tài khoản Doanh nghiệp Đối tác (1-Click)</div>
+
+        <button type="button" class="demo-acc-card" data-u="hr.fpt">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">FPT Software — Ngô Thanh Hương (hr.fpt)</span>
+            <span class="badge badge-info">HR_MANAGER</span>
+          </div>
+          <div class="demo-acc-sub">Trưởng ban Tuyển dụng FPT Software — Toàn quyền tạo yêu cầu QR, xem bản Scan Sổ gốc Watermark, quản lý mẫu truy vấn DCQL &amp; cấu hình Cache.</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-u="hr.viettel">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">Viettel Cyber Security — Đặng Thu Hà (hr.viettel)</span>
+            <span class="badge badge-success">HR_MANAGER</span>
+          </div>
+          <div class="demo-acc-sub">Trưởng phòng Nhân sự VCS — Đóng dấu mờ động <code>Viettel Cyber Security</code> khi thẩm định văn bằng số hóa từ sổ gốc.</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-u="hr.vng">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">VNG Corporation — Lý Hoàng Sơn (hr.vng)</span>
+            <span class="badge badge-purple">HR_MANAGER</span>
+          </div>
+          <div class="demo-acc-sub">Talent Acquisition Manager tại VNG Corporation (talent@vng.com.vn).</div>
+        </button>
+
+        <button type="button" class="demo-acc-card" data-u="staff.fpt">
+          <div class="demo-acc-top">
+            <span class="demo-acc-name">FPT Software — Bùi Văn Nam (staff.fpt)</span>
+            <span class="badge badge-warn">HR_STAFF</span>
+          </div>
+          <div class="demo-acc-sub">Chuyên viên Tuyển dụng — Được tạo phiên QR xác minh ứng viên nhưng không có quyền xóa mẫu truy vấn hoặc đổi cấu hình hệ thống.</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN VERIFIER SHELL -->
+<div id="appView" class="app-shell" style="display:none">
+  <aside class="sidebar">
+    <div>
+      <div class="sidebar-brand">
+        <div class="sidebar-logo" id="orgLogo">FPT</div>
+        <div class="sidebar-brand-text">
+          <h2 id="orgTitle">FPT Software</h2>
+          <p id="orgSub">OpenID4VP Verifier</p>
+        </div>
+      </div>
+
+      <div class="nav-section-label">Nghiệp vụ Tuyển dụng</div>
+      <div class="nav-list" id="navList">
+        <button class="nav-btn active" data-tab="verify">
+          <span>Xác minh Ứng viên (QR)</span>
+        </button>
+        <button class="nav-btn" data-tab="dashboard">
+          <span>Tổng quan &amp; Thống kê</span>
+        </button>
+        <button class="nav-btn" data-tab="history">
+          <span>Lịch sử Hồ sơ Ứng viên</span>
+          <span class="nav-badge" id="navHistBadge">0</span>
+        </button>
+        <button class="nav-btn" data-tab="settings">
+          <span>Mẫu Truy vấn &amp; Cache</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="sidebar-user-card">
+        <div class="sidebar-user-name" id="rpUserName">–</div>
+        <div class="sidebar-user-role" id="rpUserRole">–</div>
+        <div class="mt-8">
+          <label class="field-label" for="quickSwitchRp">Chuyển nhanh Doanh nghiệp</label>
+          <select id="quickSwitchRp">
+            <option value="hr.fpt">FPT Software (HR_MANAGER)</option>
+            <option value="hr.viettel">Viettel Cyber Security</option>
+            <option value="hr.vng">VNG Corporation</option>
+            <option value="staff.fpt">Chuyên viên FPT (HR_STAFF)</option>
+          </select>
+        </div>
+      </div>
+      <button id="btnRpLogout" class="btn-secondary btn-block">Đăng xuất phiên</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="page-header">
+      <div>
+        <h1>Cổng Thẩm định &amp; Xác minh Văn bằng Ứng viên</h1>
+        <p>Giao thức OpenID4VP 1.0 + Truy vấn DCQL + Xác minh mật mã 4 bước (ECDSA-SD-2023 &amp; Holder Binding)</p>
+      </div>
+      <div class="row">
+        <span class="badge badge-info" id="topOrgBadge">–</span>
+      </div>
+    </header>
+
+    <main class="page-body">
+
+      <!-- TAB 1: LIVE VERIFICATION & QR -->
+      <section id="tab-verify" class="tab-pane">
+        <div class="split">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">1. Thiết lập Truy vấn DCQL &amp; Sinh Mã QR</h3>
+                <p class="card-sub">Chọn từ Mẫu tuyển dụng của doanh nghiệp hoặc tùy chỉnh các thuộc tính yêu cầu ứng viên tiết lộ</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Chọn Mẫu Yêu cầu Tuyển dụng (Query Template)</label>
+                <select id="tplSelect"></select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Loại văn bằng yêu cầu</label>
+                <select id="vCredType">
+                  <option value="DegreeCredential">Bằng tốt nghiệp Đại học (DegreeCredential)</option>
+                  <option value="CourseCertificateCredential">Chứng chỉ Khóa học (CourseCertificateCredential)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Các thuộc tính yêu cầu tiết lộ trong <code>dcql_query</code></label>
+                <div id="vClaimChips"></div>
+              </div>
+
+              <button id="btnGenerateQr" class="btn-accent btn-block">
+                Tạo Yêu cầu OpenID4VP &amp; Sinh Mã QR
+              </button>
+
+              <div id="qrDisplayBox" class="qr-display" style="display:none">
+                <div class="qr-wrapper">
+                  <img id="vQrImg" src="" alt="QR OpenID4VP">
+                  <div class="qr-meta">
+                    <div class="mb-8"><b>Quét mã QR từ Ví Điện thoại Ứng viên</b></div>
+                    <div class="muted mb-8">Mở <b>/wallet.html</b> trên điện thoại để quét, hoặc bấm nút mô phỏng nhanh bên dưới nếu đang demo trên 1 máy tính:</div>
+                    <button id="btnSimulateWalletPresent" class="btn-secondary btn-sm btn-block mb-8">
+                      Trình bày nhanh từ Ví Sinh viên (Demo 1-Click)
+                    </button>
+                    <div class="mono muted break-all" id="vReqUriText"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">2. Kết quả Xác minh 4 Bước Thời gian thực (SSE)</h3>
+                <p class="card-sub">Kiểm tra tuần tự chống phát lại Redis, chữ ký Holder Binding, chữ ký Trường &amp; Bitstring Status List</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="step-row">
+                <div><span class="step-dot" id="st1"></span><b>Bước 1:</b> Chống tấn công phát lại (Redis <code>SET NX EX</code>)</div>
+                <span class="mono muted" id="stLat1">–</span>
+              </div>
+              <div class="step-row">
+                <div><span class="step-dot" id="st2"></span><b>Bước 2:</b> Chữ ký Holder Binding (VP PoP · <code>ecdsa-rdfc-2019</code>)</div>
+                <span class="mono muted" id="stLat2">–</span>
+              </div>
+              <div class="step-row">
+                <div><span class="step-dot" id="st3"></span><b>Bước 3:</b> Chữ ký Trường (<code>ecdsa-sd-2023</code>) &amp; Chữ ký Sổ gốc</div>
+                <span class="mono muted" id="stLat3">–</span>
+              </div>
+              <div class="step-row">
+                <div><span class="step-dot" id="st4"></span><b>Bước 4:</b> Kiểm tra thu hồi W3C Bitstring Status List</div>
+                <span class="mono muted" id="stLat4">–</span>
+              </div>
+
+              <div id="vBanner" class="banner-msg" style="display:none"></div>
+
+              <div class="mt-12">
+                <div class="row-between">
+                  <span class="form-label mb-0">Dữ liệu Ứng viên đã tiết lộ (Các trường khác đã ẩn mật mã)</span>
+                  <button id="btnViewWatermark" class="btn-secondary btn-sm" disabled>Đối chiếu Sổ gốc (Watermark)</button>
+                </div>
+                <pre class="code-block" id="vDisclosedPre">Đang chờ ứng viên quét mã QR và gửi gói tin vp_token…</pre>
+                <div id="vWatermarkBox" class="mt-12"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: DASHBOARD -->
+      <section id="tab-dashboard" class="tab-pane" style="display:none">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Tổng Lượt Xác minh</span><span class="badge badge-neutral">Sessions</span></div>
+            <div class="kpi-value" id="rpKpiTotal">0</div>
+            <div class="kpi-sub">Phiên xác minh OpenID4VP</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Hồ sơ Ứng viên Hợp lệ</span><span class="badge badge-success">Verified</span></div>
+            <div class="kpi-value" id="rpKpiOk">0</div>
+            <div class="kpi-sub">Vượt qua đủ 4 bước mật mã</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Tấn công / Giả mạo Bị chặn</span><span class="badge badge-danger">Blocked</span></div>
+            <div class="kpi-value" id="rpKpiBlocked">0</div>
+            <div class="kpi-sub" id="rpKpiBlockedSub">Replay, Tamper, Spoof, Revoked</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label"><span>Độ trễ Xác minh Trung bình</span><span class="badge badge-info">Latency</span></div>
+            <div class="kpi-value" id="rpKpiLat">0 ms</div>
+            <div class="kpi-sub" id="rpKpiCacheSub">–</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Các phiên Xác minh Gần đây</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Ứng viên</th>
+                  <th>Đơn vị Xác minh</th>
+                  <th>Loại văn bằng</th>
+                  <th>Kết quả</th>
+                  <th>Tổng độ trễ</th>
+                </tr>
+              </thead>
+              <tbody id="rpRecentBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CANDIDATE VERIFICATION HISTORY -->
+      <section id="tab-history" class="tab-pane" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Lịch sử Thẩm định Hồ sơ Ứng viên &amp; Phát hiện Tấn công</h3>
+              <p class="card-sub">Lưu trữ bền vững trong PostgreSQL 16 phục vụ hậu kiểm tuyển dụng</p>
+            </div>
+            <div class="row">
+              <input type="text" id="histSearch" class="w-220" placeholder="Tìm ứng viên, loại lỗi…">
+              <select id="histStatusFilter" class="w-170">
+                <option value="">— Tất cả kết quả —</option>
+                <option value="verified">Hợp lệ (Verified)</option>
+                <option value="blocked">Bị chặn (Blocked)</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Thời gian</th>
+                  <th>Ứng viên</th>
+                  <th>Đơn vị Tuyển dụng</th>
+                  <th>Loại văn bằng</th>
+                  <th>Kết quả / Loại tấn công</th>
+                  <th>Độ trễ (ms)</th>
+                  <th>Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody id="histTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: TEMPLATES & CACHE SETTINGS -->
+      <section id="tab-settings" class="tab-pane" style="display:none">
+        <div class="split split--wide-left">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Danh mục Mẫu Truy vấn Tuyển dụng (DCQL Templates)</h3>
+                <p class="card-sub">Chuẩn hóa các thuộc tính cần thu thập cho từng vị trí tuyển dụng (Chỉ HR_MANAGER được thêm/xóa)</p>
+              </div>
+            </div>
+            <div class="card-body" id="tplListBox"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Cấu hình Bộ nhớ đệm Bitstring Status List</h3>
+                <p class="card-sub">Đánh đổi giữa Tính riêng tư (Zero-Phone-Home TTL) và Độ tươi thu hồi tức thời (ETag 304)</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Chế độ Cache hiện tại</label>
+                <select id="cfgCacheMode">
+                  <option value="ETAG_REVALIDATE">ETAG_REVALIDATE — Hỏi lại bằng If-None-Match (Nhận HTTP 304, phát hiện thu hồi tức thì)</option>
+                  <option value="TTL_ONLY">TTL_ONLY — Dùng bản lưu RAM trong 300s (Không gọi về Trường, bảo vệ Herd Privacy tuyệt đối)</option>
+                </select>
+              </div>
+              <button id="btnSaveCacheCfg" class="btn-accent btn-block">Cập nhật Cấu hình Cache &amp; Xóa đệm cũ</button>
+              <div id="cacheCountersBox" class="cache-counters"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- MODAL: VERIFICATION DETAIL -->
+<div class="modal-backdrop" id="modalVerDetail">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Chi tiết Phiên Xác minh Ứng viên</h3>
+      <button class="btn-secondary btn-sm" onclick="$('modalVerDetail').classList.remove('open')">Đóng</button>
+    </div>
+    <div class="modal-body" id="verDetailBody"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="$('modalVerDetail').classList.remove('open')">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg, kind = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = msg;
+  $('toastBox').appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
+    ...opts,
+    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
+  });
+  const data = await res.json().catch(() => ({}));
+  return {ok: res.ok, status: res.status, data};
+}
+
+const OPTIONAL_CLAIMS = {
+  DegreeCredential: [
+    ['major', 'Chuyên ngành'],
+    ['degreeName', 'Tên văn bằng'],
+    ['graduationDate', 'Ngày tốt nghiệp'],
+    ['classification', 'Xếp loại bằng'],
+    ['gpa', 'Điểm trung bình (GPA)'],
+    ['studentCode', 'Mã sinh viên']
+  ],
+  CourseCertificateCredential: [
+    ['courseCode', 'Mã học phần'],
+    ['courseHours', 'Thời lượng (giờ)'],
+    ['grade', 'Điểm chữ (Grade)'],
+    ['skills', 'Kỹ năng đạt được'],
+    ['completionDate', 'Ngày hoàn thành']
+  ]
+};
+
+let rpUser = null, templates = [], es = null, currentReq = null;
+
+async function checkSession() {
+  const r = await api('/api/rp/auth/me');
+  if (!r.ok) {
+    $('loginView').style.display = 'flex';
+    $('appView').style.display = 'none';
+    return;
+  }
+  rpUser = r.data.user;
+  $('orgLogo').textContent = rpUser.orgShort;
+  $('orgTitle').textContent = rpUser.orgName;
+  $('orgSub').textContent = `${rpUser.orgDomain} · OID4VP`;
+  $('rpUserName').textContent = rpUser.fullName;
+  $('rpUserRole').textContent = `${rpUser.email} (${rpUser.role})`;
+  $('topOrgBadge').textContent = `${rpUser.orgName} · ${rpUser.fullName} (${rpUser.role})`;
+  $('quickSwitchRp').value = rpUser.username;
+  $('cfgCacheMode').value = r.data.cacheMode || 'ETAG_REVALIDATE';
+
+  $('loginView').style.display = 'none';
+  $('appView').style.display = 'grid';
+
+  await loadDashboard();
+  renderClaimChips(['major', 'degreeName', 'graduationDate']);
+}
+
+$('rpLoginForm').onsubmit = async e => {
+  e.preventDefault();
+  $('rpLoginErr').style.display = 'none';
+  const r = await api('/api/rp/auth/login', {
+    method: 'POST',
+    body: {username: $('inRpUser').value.trim(), password: $('inRpPass').value}
+  });
+  if (!r.ok) {
+    $('rpLoginErr').textContent = r.data?.error || 'Đăng nhập thất bại';
+    $('rpLoginErr').style.display = 'block';
+    return;
+  }
+  toast(`Đã đăng nhập: ${r.data.user.orgName} — ${r.data.user.fullName}`, 'ok');
+  await checkSession();
+};
+
+document.querySelectorAll('.demo-acc-card').forEach(btn => {
+  btn.onclick = () => {
+    $('inRpUser').value = btn.dataset.u;
+    $('inRpPass').value = 'Demo@2026';
+    $('rpLoginForm').requestSubmit();
+  };
+});
+
+$('quickSwitchRp').onchange = async () => {
+  const r = await api('/api/rp/auth/login', {
+    method: 'POST',
+    body: {username: $('quickSwitchRp').value, password: 'Demo@2026'}
+  });
+  if (r.ok) {
+    toast(`Đã chuyển sang đơn vị: ${r.data.user.orgName} (${r.data.user.fullName})`, 'ok');
+    await checkSession();
+  }
+};
+
+$('btnRpLogout').onclick = async () => {
+  await api('/api/rp/auth/logout', {method: 'POST'});
+  checkSession();
+};
+
+function switchTab(tab) {
+  document.querySelectorAll('#navList .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-pane').forEach(p => p.style.display = p.id === `tab-${tab}` ? 'block' : 'none');
+  if (tab === 'dashboard') loadDashboard();
+  if (tab === 'history') loadHistory();
+  if (tab === 'settings') loadDashboard();
+}
+document.querySelectorAll('#navList .nav-btn').forEach(b => {
+  b.onclick = () => switchTab(b.dataset.tab);
+});
+
+function renderClaimChips(selected = []) {
+  const t = $('vCredType').value;
+  const set = new Set(selected);
+  $('vClaimChips').innerHTML = (OPTIONAL_CLAIMS[t] || []).map(([k, lbl]) => `
+    <label class="chip-label">
+      <input type="checkbox" class="v-claim-cb" value="${esc(k)}" ${set.has(k) ? 'checked' : ''}>
+      <span>${esc(lbl)}</span>
+    </label>
+  `).join('');
+}
+
+$('vCredType').onchange = () => renderClaimChips(['major', 'courseCode', 'grade']);
+
+$('tplSelect').onchange = () => {
+  const tpl = templates.find(x => x.id === $('tplSelect').value);
+  if (!tpl) return;
+  $('vCredType').value = tpl.credentialType;
+  renderClaimChips(tpl.claims || []);
+};
+
+function resetStepper() {
+  [1, 2, 3, 4].forEach(i => {
+    $('st' + i).className = 'step-dot';
+    $('stLat' + i).textContent = '–';
+  });
+  $('vBanner').style.display = 'none';
+  $('vDisclosedPre').textContent = 'Đang chờ ứng viên quét mã QR và gửi gói tin vp_token…';
+  $('btnViewWatermark').disabled = true;
+  $('vWatermarkBox').innerHTML = '';
+}
+
+$('btnGenerateQr').onclick = async () => {
+  resetStepper();
+  const claims = [...document.querySelectorAll('.v-claim-cb:checked')].map(i => i.value);
+  const r = await api('/api/verifier/request', {
+    method: 'POST',
+    body: {
+      credentialType: $('vCredType').value,
+      claims,
+      verifierName: rpUser ? `${rpUser.orgName} (${rpUser.email})` : undefined,
+      publicOrigin: location.origin
+    }
+  });
+  if (!r.ok) { toast('Không tạo được yêu cầu OpenID4VP', 'err'); return; }
+  currentReq = r.data;
+  $('qrDisplayBox').style.display = 'block';
+  $('vQrImg').src = r.data.qrDataUrl;
+  $('vReqUriText').textContent = r.data.request_uri;
+
+  if (es) es.close();
+  es = new EventSource('/api/verifier/events?state=' + encodeURIComponent(r.data.request.state));
+  es.addEventListener('VERIFICATION_COMPLETED', e => {
+    const d = JSON.parse(e.data);
+    const t = d.latency || {};
+    [1, 2, 3, 4].forEach(i => $('st' + i).className = 'step-dot ok');
+    $('stLat1').textContent = `${(t.redisMs || 0).toFixed(2)} ms`;
+    $('stLat2').textContent = 'PoP OK';
+    $('stLat3').textContent = `${(t.cryptoMs || 0).toFixed(2)} ms`;
+    $('stLat4').textContent = `${(t.statusMs || 0).toFixed(2)} ms`;
+    const b = $('vBanner');
+    b.style.display = 'block';
+    b.className = 'banner-msg banner-ok';
+    b.textContent = `Xác minh thành công 4/4 bước cho ứng viên ${d.disclosedClaims?.studentName || ''} (Tổng: ${((t.redisMs || 0) + (t.cryptoMs || 0) + (t.statusMs || 0)).toFixed(2)} ms)`;
+    $('vDisclosedPre').textContent = JSON.stringify(d.disclosedClaims, null, 2);
+    if (d.legacyDocument) {
+      $('btnViewWatermark').disabled = false;
+      $('btnViewWatermark').dataset.url = new URL(d.legacyDocument).pathname;
+    }
+    toast('Đã xác minh thành công hồ sơ ứng viên!', 'ok');
+    loadDashboard();
+  });
+  es.addEventListener('ATTACK_DETECTED', e => {
+    const d = JSON.parse(e.data);
+    const mapStep = {replay: 1, holder_binding: 2, issuer_proof: 3, status: 4, session: 1};
+    const f = mapStep[d.step] || 1;
+    for (let i = 1; i <= 4; i++) $('st' + i).className = i < f ? 'step-dot ok' : (i === f ? 'step-dot bad' : 'step-dot');
+    const b = $('vBanner');
+    b.style.display = 'block';
+    b.className = 'banner-msg banner-bad';
+    b.textContent = `Chặn đứng ở bước ${f} [${d.attackType} · HTTP ${d.httpStatus}]: ${d.message}`;
+    toast(`Đã chặn cuộc tấn công: ${d.attackType}`, 'err');
+    loadDashboard();
+  });
+};
+
+// Co-located 1-click simulation using the Wallet service
+const WALLET_API = (location.port === '4002' || location.port === '4001')
+  ? `${location.protocol}//${location.hostname}:3000`
+  : '';
+
+$('btnSimulateWalletPresent').onclick = async () => {
+  if (!currentReq) return;
+  try {
+    let wInfo = await (await fetch(WALLET_API + '/api/wallet/info')).json();
+    const wantCourse = $('vCredType').value === 'CourseCertificateCredential';
+    const wantLegacy = $('tplSelect').value === 'tpl-legacy';
+    let match = (wInfo.credentials || []).find(c =>
+      wantCourse ? c.type.includes('CourseCertificateCredential') : (wantLegacy ? c.hasLegacy : !c.type.includes('CourseCertificateCredential'))
+    );
+    if (!match) {
+      if (wantCourse) {
+        const iss = await (await fetch(WALLET_API + '/api/issuer/issue-course', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
+        })).json();
+        await fetch(WALLET_API + '/api/wallet/receive', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: iss.recordId, credential: iss.credential})
+        });
+        match = {id: iss.recordId};
+      } else if (wantLegacy) {
+        const ing = await (await fetch(WALLET_API + '/api/issuer/legacy/ingest', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
+        })).json();
+        const app = await (await fetch(WALLET_API + '/api/issuer/legacy/approve', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({recordId: ing.recordId})
+        })).json();
+        await fetch(WALLET_API + '/api/wallet/receive', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: app.recordId, credential: app.credential})
+        });
+        match = {id: app.recordId};
+      } else {
+        const iss = await (await fetch(WALLET_API + '/api/issuer/issue-degree', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
+        })).json();
+        await fetch(WALLET_API + '/api/wallet/receive', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: iss.recordId, credential: iss.credential})
+        });
+        match = {id: iss.recordId};
+      }
+    }
+    await fetch(WALLET_API + '/api/wallet/present', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        request: currentReq.request,
+        credentialId: match.id,
+        consent: true,
+        submit: true
+      })
+    });
+  } catch (e) {
+    toast('Không kết nối được tới dịch vụ Ví (:3000): ' + e.message, 'err');
+  }
+};
+
+$('btnViewWatermark').onclick = async () => {
+  const url = $('btnViewWatermark').dataset.url;
+  if (!url) return;
+  const r = await fetch(url);
+  $('vWatermarkBox').innerHTML = await r.text();
+  const svg = $('vWatermarkBox').querySelector('svg');
+  if (svg) { svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.borderRadius = '8px'; }
+};
+
+async function loadDashboard() {
+  const r = await api('/api/rp/dashboard');
+  if (!r.ok) return;
+  const d = r.data;
+  templates = d.templates || [];
+  const curTpl = $('tplSelect').value;
+  $('tplSelect').innerHTML = templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  if (curTpl && templates.some(t => t.id === curTpl)) $('tplSelect').value = curTpl;
+
+  $('navHistBadge').textContent = d.stats.total;
+  $('rpKpiTotal').textContent = d.stats.total;
+  $('rpKpiOk').textContent = d.stats.verified;
+  $('rpKpiBlocked').textContent = d.stats.blocked;
+  $('rpKpiLat').textContent = `${d.stats.avgLatencyMs} ms`;
+  $('rpKpiCacheSub').textContent = `Chế độ Cache: ${d.cache.mode} (304: ${d.cache.revalidate304}, Hit: ${d.cache.cacheHits})`;
+
+  $('rpRecentBody').innerHTML = (d.recent || []).map(v => {
+    const totalMs = ((v.timings?.redisMs || 0) + (v.timings?.cryptoMs || 0) + (v.timings?.statusMs || 0)).toFixed(2);
+    return `
+      <tr>
+        <td class="mono">${new Date(v.at).toLocaleTimeString()}</td>
+        <td><b>${esc(v.studentName || '—')}</b></td>
+        <td>${esc(v.verifierName)}</td>
+        <td><span class="badge badge-neutral">${esc(v.credentialType)}</span></td>
+        <td>${v.verified ? '<span class="badge badge-success">Hợp lệ</span>' : `<span class="badge badge-danger">Chặn: ${esc(v.attackType)}</span>`}</td>
+        <td class="mono">${totalMs} ms</td>
+      </tr>
+    `;
+  }).join('') || '<tr class="empty-row"><td colspan="6">Chưa có phiên xác minh nào.</td></tr>';
+
+  $('tplListBox').innerHTML = templates.map(t => `
+    <div class="template-item">
+      <div class="row-between">
+        <b>${esc(t.name)}</b>
+        <span class="badge badge-info">${esc(t.credentialType)}</span>
+      </div>
+      <div class="muted mt-8 mb-8">${esc(t.description || '')}</div>
+      <div class="mono">Claims: ${(t.claims || []).join(', ')}</div>
+    </div>
+  `).join('');
+
+  $('cacheCountersBox').innerHTML = `
+    <div><b>Bộ đếm VerifierStatusCache:</b></div>
+    <div class="mt-8">Chế độ đang bật: <code class="mono">${esc(d.cache.mode)}</code></div>
+    <div>• Số lần tái xác thực HTTP 304 (ETag khớp, không tải lại thân16KB): <b>${d.cache.revalidate304}</b></div>
+    <div>• Số lần đọc trực tiếp từ bộ nhớ đệm RAM (Zero-Phone-Home Hit): <b>${d.cache.cacheHits}</b></div>
+    <div>• Số lần tải mới toàn bộ danh sách (HTTP 200): <b>${d.cache.fullFetch200}</b></div>
+  `;
+}
+
+async function loadHistory() {
+  const q = $('histSearch').value.trim();
+  const st = $('histStatusFilter').value;
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (st) params.set('status', st);
+  const r = await api('/api/rp/verifications?' + params.toString());
+  if (!r.ok) return;
+  $('histTableBody').innerHTML = (r.data.items || []).map(v => {
+    const totalMs = ((v.timings?.redisMs || 0) + (v.timings?.cryptoMs || 0) + (v.timings?.statusMs || 0)).toFixed(2);
+    return `
+      <tr>
+        <td class="mono">${new Date(v.at).toLocaleString()}</td>
+        <td><b>${esc(v.studentName || 'Không rõ (Bị chặn)')}</b></td>
+        <td>${esc(v.verifierName)}</td>
+        <td><span class="badge badge-neutral">${esc(v.credentialType)}</span></td>
+        <td>${v.verified ? '<span class="badge badge-success">Đạt 4/4 bước</span>' : `<span class="badge badge-danger">${esc(v.attackType)}: ${esc(v.reason || '')}</span>`}</td>
+        <td class="mono">${totalMs} ms</td>
+        <td><button class="btn-sm btn-secondary" onclick="showVerDetail('${esc(v.state)}')">Xem</button></td>
+      </tr>
+    `;
+  }).join('') || '<tr class="empty-row"><td colspan="7">Chưa có bản ghi nào.</td></tr>';
+}
+
+$('histSearch').oninput = loadHistory;
+$('histStatusFilter').onchange = loadHistory;
+
+window.showVerDetail = async function(state) {
+  const r = await api('/api/rp/verifications/' + encodeURIComponent(state));
+  if (!r.ok) return;
+  const v = r.data.item;
+  $('verDetailBody').innerHTML = `
+    <div class="mb-12">
+      <b>Đơn vị xác minh:</b> ${esc(v.verifierName)} · <b>Thời gian:</b> ${new Date(v.at).toLocaleString()}
+    </div>
+    <div class="mb-12">
+      <b>Kết quả:</b> ${v.verified ? '<span class="badge badge-success">Hợp lệ</span>' : `<span class="badge badge-danger">Bị chặn (${esc(v.attackType)}) — ${esc(v.reason)}</span>`}
+    </div>
+    <div class="section-label">Dữ liệu Thuộc tính Tiết lộ (disclosedClaims)</div>
+    <pre class="code-block">${esc(JSON.stringify(v.disclosedClaims || {}, null, 2))}</pre>
+  `;
+  $('modalVerDetail').classList.add('open');
+};
+
+$('btnSaveCacheCfg').onclick = async () => {
+  const r = await api('/api/verifier/config', {
+    method: 'POST',
+    body: {mode: $('cfgCacheMode').value, ttlSeconds: 300, invalidate: true}
+  });
+  if (r.ok) {
+    toast(`Đã chuyển chế độ Cache sang ${r.data.mode} và xóa đệm cũ!`, 'ok');
+    loadDashboard();
+  }
+};
+
+checkSession();
+</script>
+</body>
+</html>

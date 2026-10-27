@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W3C Verifiable Credentials — Hệ thống Chứng chỉ Học tập Số (UET-VNU)</title>
+<meta name="theme-color" content="#14304f">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/portal.css">
+</head>
+<body>
+
+<div class="global-bar">
+  <div class="row">
+    <span class="global-pill">3 Cổng Web Độc lập + Bàn Demo Hội đồng</span>
+    <span>Chọn từng cổng sản phẩm độc lập (có Đăng nhập scrypt + Session + Sidebar) hoặc dùng Bàn Demo 3 cột bên dưới:</span>
+  </div>
+  <nav class="global-nav">
+    <a href="/issuer.html">1. Web Nhà trường <span class="port-tag">:4001</span></a>
+    <a href="/wallet.html">2. Web Ví Sinh viên <span class="port-tag">:3000</span></a>
+    <a href="/verifier.html">3. Web Tuyển dụng <span class="port-tag">:4002</span></a>
+  </nav>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">UET</div>
+    <div class="brand-text">
+      <h1>Hệ thống Chứng chỉ Học tập Số — W3C VC 2.0 &amp; ECDSA-SD-2023</h1>
+      <p>Kiến trúc 3 miền độc lập: Issuer (:4001) · Non-Custodial Wallet (:3000) · Verifier (:4002) · Redis 7.4 &amp; PostgreSQL 16</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="seg-tabs" id="roleSwitcher">
+      <button data-role="all" class="active">Tổng quan 3 miền</button>
+      <button data-role="issuer">1. Web Nhà trường (:4001)</button>
+      <button data-role="wallet">2. Web Ví Người học (:3000)</button>
+      <button data-role="verifier">3. Web Tuyển dụng (:4002)</button>
+    </div>
+    <div class="status-pill" id="badge">
+      <span class="status-dot"></span>
+      <span>Đang kiểm tra trạng thái Ví…</span>
+    </div>
+    <a class="btn-link secondary" href="/wallet.html" target="_blank">Ví Mobile PWA ↗</a>
+  </div>
+</header>
+
+<div class="container">
+  <!-- 3-Column Core Architecture -->
+  <div class="grid-3">
+
+    <!-- COLUMN 1: ISSUER -->
+    <section class="panel" id="issuerPanel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title"><span class="step-num">1</span> Cổng Đào tạo (Issuer)</h2>
+          <p class="panel-sub">Cấp phát văn bằng số, ký duyệt sổ gốc 2 bước &amp; thu hồi Bitstring</p>
+        </div>
+        <span class="port-badge">:4001</span>
+      </div>
+      <div class="panel-body">
+        <div class="subcard subcard-lead">
+          <div class="subcard-title">
+            <span>Phiên đăng nhập &amp; Phân quyền Nhà trường (RBAC)</span>
+            <span class="tag tag-selective" id="issuerRoleTag">DEAN_APPROVER</span>
+          </div>
+          <select id="issuerRoleSel">
+            <option value="DEAN_APPROVER">Trưởng phòng Đào tạo — PGS.TS Trần Văn B (Ký số Multikey &amp; Thu hồi)</option>
+            <option value="STAFF_VERIFIER">Chuyên viên Văn thư — Nguyễn Thị A (Nhập hồ sơ &amp; Scan Sổ gốc)</option>
+          </select>
+          <div id="rbacHint" class="muted mt-8">
+            Đang đăng nhập quyền <b>Lãnh đạo Phòng Đào tạo</b>: Được phép đóng chữ ký số phát hành và thu hồi văn bằng.
+          </div>
+        </div>
+
+        <details class="subcard subcard-lead">
+          <summary>
+            Hồ sơ Sinh viên nhận văn bằng (Mặc định: Nguyễn Phi Anh · 23020009)
+          </summary>
+          <div class="form-grid-2 mt-12">
+            <div>
+              <label class="field-label" for="inStudentName">Họ và tên</label>
+              <input type="text" id="inStudentName" value="Nguyễn Phi Anh">
+            </div>
+            <div>
+              <label class="field-label" for="inStudentCode">Mã sinh viên / Học viên</label>
+              <input type="text" id="inStudentCode" value="23020009">
+            </div>
+            <div>
+              <label class="field-label" for="inMajor">Chuyên ngành</label>
+              <input type="text" id="inMajor" value="Công nghệ Thông tin">
+            </div>
+            <div>
+              <label class="field-label" for="inGpa">GPA / Xếp loại</label>
+              <input type="text" id="inGpa" value="3.78">
+            </div>
+          </div>
+        </details>
+
+        <span class="field-label">Phát hành chứng chỉ mới</span>
+        <div class="btn-group">
+          <button id="btnDegree">+ Cấp Bằng tốt nghiệp</button>
+          <button id="btnCourse" class="secondary">+ Cấp Chứng chỉ khóa học</button>
+        </div>
+
+        <div class="subcard">
+          <div class="subcard-title">
+            <span>Số hóa Sổ gốc Lịch sử (Duyệt 2 bước)</span>
+            <span class="mono muted">SHA-256 + Multikey</span>
+          </div>
+          <div class="btn-group">
+            <button id="btnIngest" class="secondary">Bước 1: Chuyên viên Nhập Scan 2.4MB</button>
+            <button id="btnApprove" class="accent" disabled>Bước 2: Lãnh đạo Ký duyệt</button>
+          </div>
+        </div>
+
+        <div class="subcard" id="issuerInfo">
+          <span class="muted">Chưa có văn bằng nào được cấp trong phiên này. Hãy bấm nút cấp phát phía trên.</span>
+        </div>
+
+        <div class="subcard">
+          <div class="subcard-title">
+            <span>W3C Bitstring Status List (131.072 bits)</span>
+            <button class="secondary btn-sm" id="btnSl">Làm mới</button>
+          </div>
+          <div id="slInfo" class="muted">Đang tải danh sách trạng thái…</div>
+          <div class="mt-12">
+            <button id="btnRevoke" class="danger-outline btn-block" disabled>Thu hồi văn bằng đang chọn (Bật Bit = 1)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 2: HOLDER WALLET -->
+    <section class="panel" id="walletPanel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title"><span class="step-num">2</span> Ví Văn bằng Số (Holder Wallet)</h2>
+          <p class="panel-sub">Tạo Derived VC &amp; ký Holder Binding cục bộ, không lộ Base VC</p>
+        </div>
+        <span class="port-badge">:3000</span>
+      </div>
+      <div class="panel-body">
+        <div class="subcard subcard-lead">
+          <div class="subcard-title">
+            <span>Xác thực Sinh viên &amp; Quản lý Thiết bị Ví</span>
+            <span class="tag tag-selective">Đã xác thực</span>
+          </div>
+          <select id="studentAuthSel" class="mb-8">
+            <option value="sso">Sinh viên đang học — SSO Email trường (23020009@vnu.edu.vn)</option>
+            <option value="vneid">Cựu sinh viên (đã thu hồi mail) — Định danh VNeID Mức 2 / CCCD</option>
+          </select>
+          <div class="btn-group btn-group--equal">
+            <button id="btnBackupWallet" class="secondary btn-sm">Sao lưu Ví</button>
+            <button id="btnRotateDevice" class="secondary btn-sm">Đổi thiết bị</button>
+            <button id="btnRestoreWallet" class="secondary btn-sm" disabled>Khôi phục Ví</button>
+          </div>
+          <div id="walletDeviceMsg" class="muted mt-8">
+            Khóa riêng lưu trong phần cứng thiết bị. Khi đổi điện thoại có thể khôi phục từ bản Sao lưu hoặc định danh VNeID để xin cấp lại.
+          </div>
+        </div>
+
+        <label class="field-label" for="credSel">Chứng chỉ đang lưu trong Ví</label>
+        <select id="credSel"></select>
+
+        <div id="vcCardBox">
+          <div class="vc-card">
+            <div class="vc-card-top">
+              <span id="vcCardType">CHƯA CÓ CHỨNG CHỈ</span>
+              <span id="vcCardIndex">statusListIndex: –</span>
+            </div>
+            <div class="vc-card-title" id="vcCardTitle">Hãy cấp phát văn bằng từ Cổng Đào tạo</div>
+            <div class="vc-card-holder" id="vcCardHolder">Holder DID: –</div>
+            <div class="vc-card-meta">
+              <span>ecdsa-sd-2023 + ecdsa-rdfc-2019</span>
+              <span>P-256 Multikey</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="walletEmpty" class="subcard muted text-center">
+          Đang chờ yêu cầu xác minh (OpenID4VP DCQL) từ Cổng Tuyển dụng…
+        </div>
+
+        <div id="walletPreview" style="display:none">
+          <div class="subcard">
+            <div class="subcard-title">
+              <span>Yêu cầu chia sẻ dữ liệu (Consent Preview)</span>
+            </div>
+            <div class="muted mb-8" id="verifierName"></div>
+            <div id="previewList"></div>
+            <div class="btn-group btn-group--equal mt-12">
+              <button id="btnConsent" class="accent">Chấp thuận &amp; Ký VP</button>
+              <button id="btnReject" class="secondary">Từ chối</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 3: VERIFIER -->
+    <section class="panel" id="verifierPanel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title"><span class="step-num">3</span> Cổng Tuyển dụng (Verifier)</h2>
+          <p class="panel-sub">Truy vấn DCQL, quét QR Cross-Device &amp; xác minh 4 bước thời gian thực</p>
+        </div>
+        <span class="port-badge">:4002</span>
+      </div>
+      <div class="panel-body">
+        <div class="subcard subcard-lead">
+          <div class="subcard-title">
+            <span>Phiên Doanh nghiệp Tuyển dụng (Relying Party)</span>
+            <span class="tag tag-selective">OID4VP Verifier</span>
+          </div>
+          <select id="employerSel">
+            <option value="FPT Software (hr@fpt.com.vn)">FPT Software — Ban Tuyển dụng (hr@fpt.com.vn)</option>
+            <option value="Viettel Cyber Security (tuyendung@viettel.com.vn)">Viettel Cyber Security — Phòng Nhân sự (tuyendung@viettel.com.vn)</option>
+            <option value="VNG Corporation (talent@vng.com.vn)">VNG Corporation — Talent Acquisition (talent@vng.com.vn)</option>
+          </select>
+        </div>
+
+        <div class="form-grid-2">
+          <div>
+            <label class="field-label" for="ctype">Loại văn bằng yêu cầu</label>
+            <select id="ctype">
+              <option value="DegreeCredential">Bằng tốt nghiệp</option>
+              <option value="CourseCertificateCredential">Chứng chỉ khóa học</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="cacheMode">Cơ chế Cache Status List</label>
+            <select id="cacheMode">
+              <option value="ETAG_REVALIDATE">ETAG (If-None-Match 304)</option>
+              <option value="TTL_ONLY">TTL_ONLY (Cache RAM 300s)</option>
+            </select>
+          </div>
+        </div>
+
+        <span class="field-label mt-12">Thuộc tính yêu cầu tiết lộ (DCQL Claims)</span>
+        <div id="claimBoxes" class="chip-grid"></div>
+
+        <button id="btnRequest" class="btn-block">Tạo yêu cầu OpenID4VP &amp; Sinh mã QR</button>
+
+        <div id="qrBox" style="display:none" class="qr-wrapper">
+          <img id="qrImg" alt="QR OpenID4VP" src="">
+          <div class="qr-meta">
+            <div class="mb-8"><b>Quét mã QR từ điện thoại</b></div>
+            <div class="muted mb-8">Mở <b>/wallet.html</b> trên điện thoại để quét camera, hoặc chấp thuận ngay ở cột Ví bên trái.</div>
+            <div class="mono muted break-all" id="requestUri"></div>
+          </div>
+        </div>
+
+        <div class="subcard">
+          <div class="subcard-title">
+            <span>Quy trình Xác minh 4 bước (Real-time SSE)</span>
+          </div>
+          <div class="stepper">
+            <div class="step-item">
+              <div class="step-left"><span class="dot" id="s1"></span><span>1. Chống phát lại (Redis SET NX EX)</span></div>
+              <span class="step-latency" id="lat1">–</span>
+            </div>
+            <div class="step-item">
+              <div class="step-left"><span class="dot" id="s2"></span><span>2. Chữ ký Holder Binding (VP PoP)</span></div>
+              <span class="step-latency" id="lat2">–</span>
+            </div>
+            <div class="step-item">
+              <div class="step-left"><span class="dot" id="s3"></span><span>3. Chữ ký Trường (ECDSA-SD) &amp; Sổ gốc</span></div>
+              <span class="step-latency" id="lat3">–</span>
+            </div>
+            <div class="step-item">
+              <div class="step-left"><span class="dot" id="s4"></span><span>4. Trạng thái Bitstring Status List</span></div>
+              <span class="step-latency" id="lat4">–</span>
+            </div>
+          </div>
+
+          <div id="verifyMsg" style="display:none"></div>
+
+          <div class="mt-12">
+            <div class="row-between">
+              <span class="field-label mb-0">Dữ liệu Verifier nhận được (Đã ẩn PII nhạy cảm)</span>
+              <button class="secondary btn-sm" id="btnScan" disabled>Đối chiếu Sổ gốc (Watermark)</button>
+            </div>
+            <pre id="disclosed" class="code-block">–</pre>
+            <div id="scanBox" class="mt-8"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Bottom 2-Column Inspector & Attack Console -->
+  <div class="grid-2">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Thanh tra Cấu trúc Mật mã (Live JSON Inspector)</h2>
+          <p class="panel-sub">So sánh trực tiếp chứng chỉ gốc trong Ví và gói tin vp_token gửi qua mạng</p>
+        </div>
+        <div class="seg-tabs">
+          <button id="tab1" class="active">1. Base VC trong Ví</button>
+          <button id="tab2">2. Gói tin vp_token gửi đi</button>
+          <button id="tab3">3. DID Document Trường</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <pre id="diff" class="code-block code-260 m-0">Hãy cấp phát một văn bằng để thanh tra dữ liệu JSON-LD.</pre>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Mô phỏng Tấn công &amp; Phòng thủ Thời gian thực (Attack Simulator)</h2>
+          <p class="panel-sub">Kiểm chứng khả năng chặn đứng 5 kịch bản tấn công mật mã &amp; giao thức</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="attack-grid">
+          <button class="attack-btn" id="aReplay">1. Bắn 200 luồng Replay cùng Nonce</button>
+          <button class="attack-btn" id="aTamper">2. Sửa đổi trái phép dữ liệu (Tamper)</button>
+          <button class="attack-btn" id="aSpoof">3. Giả mạo khóa người giữ (Holder Spoof)</button>
+          <button class="attack-btn" id="aCross">4. Phát lại chéo đơn vị (Cross-Verifier)</button>
+          <button class="attack-btn span-2" id="aRevoked">5. Thu hồi văn bằng rồi trình bày lại (Revoked Credential)</button>
+        </div>
+        <pre id="attackOut" class="code-block code-140">Chọn một kịch bản tấn công phía trên để chạy kiểm thử trực tiếp…</pre>
+        <div class="mt-12">
+          <span class="field-label">Nhật ký Sự kiện Thời gian thực (SSE Stream)</span>
+          <div id="log" class="event-log"><div class="muted">Chưa có sự kiện nào.</div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Hỗ trợ chạy cả trên cổng riêng (:4001, :4002) lẫn qua Unified Gateway (:3000 / HTTPS Tunnel)
+const API_BASE = (location.port === '4001' || location.port === '4002')
+  ? `${location.protocol}//${location.hostname}:3000`
+  : '';
+const apiFetch = (path, init) => fetch(API_BASE + path, init);
+const J = (url, body, extraHeaders) => apiFetch(url, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Issuer-Role': $('issuerRoleSel') ? $('issuerRoleSel').value : 'DEAN_APPROVER',
+    ...(extraHeaders || {})
+  },
+  body: JSON.stringify(body || {})
+}).then(async r => ({status: r.status, body: await r.json()}));
+
+function customSubject() {
+  const studentName = ($('inStudentName')?.value || 'Nguyễn Phi Anh').trim();
+  const studentCode = ($('inStudentCode')?.value || '23020009').trim();
+  const major = ($('inMajor')?.value || 'Công nghệ Thông tin').trim();
+  const gpaVal = parseFloat($('inGpa')?.value || '3.78');
+  return {
+    studentName,
+    studentCode,
+    major,
+    gpa: Number.isFinite(gpaVal) ? gpaVal : 3.78
+  };
+}
+
+let walletBackupBundle = null;
+
+$('issuerRoleSel').onchange = () => {
+  const role = $('issuerRoleSel').value;
+  $('issuerRoleTag').textContent = role;
+  $('issuerRoleTag').className = role === 'DEAN_APPROVER' ? 'tag tag-selective' : 'tag tag-mandatory';
+  if (role === 'STAFF_VERIFIER') {
+    $('rbacHint').innerHTML = 'Đang đăng nhập quyền <b>Chuyên viên Văn thư (STAFF_VERIFIER)</b>: Chỉ được phép nhập hồ sơ &amp; Scan Sổ gốc (Bước 1). Nếu bấm Ký phát hành hoặc Thu hồi, Backend sẽ chặn bằng <b>HTTP 403 RBAC_FORBIDDEN</b>.';
+  } else {
+    $('rbacHint').innerHTML = 'Đang đăng nhập quyền <b>Trưởng phòng Đào tạo (DEAN_APPROVER)</b>: Được phép đóng chữ ký số Multikey P-256 phát hành và thu hồi văn bằng.';
+  }
+};
+
+function setRoleView(role) {
+  const panels = {issuer: $('issuerPanel'), wallet: $('walletPanel'), verifier: $('verifierPanel')};
+  const grid = document.querySelector('.grid-3');
+  if (role === 'all') {
+    grid.style.gridTemplateColumns = '';
+    Object.values(panels).forEach(p => p.style.display = '');
+  } else {
+    grid.style.gridTemplateColumns = 'minmax(0, 760px)';
+    grid.style.justifyContent = 'center';
+    Object.entries(panels).forEach(([k, p]) => p.style.display = (k === role) ? '' : 'none');
+  }
+  document.querySelectorAll('#roleSwitcher button').forEach(b => {
+    b.className = (b.dataset.role === role) ? 'active' : '';
+  });
+}
+document.querySelectorAll('#roleSwitcher button').forEach(b => {
+  b.onclick = () => setRoleView(b.dataset.role);
+});
+const initRole = new URLSearchParams(location.search).get('role')
+  || (location.port === '4001' ? 'issuer' : location.port === '4002' ? 'verifier' : 'all');
+if (initRole !== 'all') setRoleView(initRole);
+
+const label = {
+  studentName: 'Họ và tên',
+  graduated: 'Đã tốt nghiệp',
+  legacyProvenance: 'Lưu vết sổ gốc (LegacyProvenance)',
+  major: 'Chuyên ngành',
+  degreeName: 'Tên văn bằng',
+  graduationDate: 'Ngày tốt nghiệp',
+  gpa: 'Điểm trung bình (GPA)',
+  classification: 'Xếp loại bằng',
+  studentCode: 'Mã sinh viên',
+  courseName: 'Tên học phần',
+  certificateValid: 'Hiệu lực chứng chỉ',
+  courseCode: 'Mã học phần',
+  courseHours: 'Thời lượng (giờ)',
+  completionDate: 'Ngày hoàn thành',
+  grade: 'Điểm chữ (Grade)',
+  skills: 'Kỹ năng đạt được'
+};
+
+const OPTIONAL = {
+  DegreeCredential: ['major', 'degreeName', 'graduationDate', 'classification', 'gpa', 'studentCode'],
+  CourseCertificateCredential: ['skills', 'courseHours', 'courseCode', 'completionDate', 'grade']
+};
+
+let did = '', creds = {}, indexOf = {}, pendingLegacy = null, request = null, preview = null, es = null, lastBody = null, tab = 1;
+
+function renderClaims() {
+  const t = $('ctype').value;
+  $('claimBoxes').innerHTML = OPTIONAL[t].map((k, i) =>
+    `<label class="chip"><input type="checkbox" value="${k}" ${i === 0 ? 'checked' : ''}><span>${label[k]}</span></label>`
+  ).join('');
+}
+
+const chosenClaims = () => [...document.querySelectorAll('#claimBoxes input:checked')].map(i => i.value);
+
+function log(msg, cls) {
+  const box = $('log');
+  if (box.querySelector('.muted')) box.innerHTML = '';
+  box.insertAdjacentHTML('afterbegin', `<div class="ev-item ${cls || ''}">[${new Date().toLocaleTimeString()}] ${esc(msg)}</div>`);
+}
+
+async function refreshWallet() {
+  const info = await (await apiFetch('/api/wallet/info')).json();
+  did = info.did;
+  $('badge').innerHTML = `<span class="status-dot"></span><span>Non-Custodial P-256 Active · ${esc(did.slice(0, 22))}…</span>`;
+  const sel = $('credSel'), cur = sel.value;
+  sel.innerHTML = info.credentials.map(c => {
+    const tName = c.type.includes('CourseCertificateCredential')
+      ? 'Chứng chỉ khóa học (INT3306)'
+      : (c.hasLegacy ? 'Bằng Cử nhân CNTT (Cấp lại từ Sổ gốc)' : 'Bằng Cử nhân CNTT');
+    return `<option value="${c.id}">${tName} · #${indexOf[c.id] ?? '?'} (${c.id.slice(0, 6)})</option>`;
+  }).join('') || '<option value="">— Ví đang trống —</option>';
+  if (cur && info.credentials.some(c => c.id === cur)) sel.value = cur;
+  $('btnRevoke').disabled = !sel.value;
+  await updateVcCard();
+}
+
+async function updateVcCard() {
+  const id = $('credSel').value;
+  if (!id) return;
+  const vc = await (await apiFetch('/api/wallet/credential/' + id)).json();
+  creds[id] = vc;
+  const s = vc.credentialSubject;
+  const isCourse = vc.type.includes('CourseCertificateCredential');
+  $('vcCardType').textContent = isCourse
+    ? 'COURSE CERTIFICATE CREDENTIAL'
+    : (s.legacyProvenance ? 'LEGACY REISSUED DEGREE CREDENTIAL' : 'DEGREE CREDENTIAL');
+  $('vcCardIndex').textContent = `statusListIndex: #${vc.credentialStatus?.statusListIndex ?? '–'}`;
+  $('vcCardTitle').textContent = isCourse ? s.courseName : `${s.degreeName} — ${s.major}`;
+  $('vcCardHolder').textContent = `${s.studentName} · ${did.slice(0, 32)}…`;
+  showTabContent();
+}
+
+async function receive(r) {
+  indexOf[r.recordId] = r.statusListIndex;
+  creds[r.recordId] = r.credential;
+  await J('/api/wallet/receive', {id: r.recordId, credential: r.credential});
+  await refreshWallet();
+  $('credSel').value = r.recordId;
+  $('btnRevoke').disabled = false;
+  await updateVcCard();
+
+  const s = r.credential.credentialSubject;
+  $('issuerInfo').innerHTML = `
+    <div class="subcard-title"><span>Văn bằng vừa phát hành</span><span class="tag tag-selective">Đã chuyển vào Ví</span></div>
+    <div class="kv-row"><span class="kv-label">Định danh loại</span><span class="kv-val mono">${esc(r.credential.type.slice(1).join(' + '))}</span></div>
+    <div class="kv-row"><span class="kv-label">Người nhận</span><span class="kv-val">${esc(s.studentName)}</span></div>
+    <div class="kv-row"><span class="kv-label">Vị trí Bitstring</span><span class="kv-val mono">Index #${r.statusListIndex}</span></div>
+    <div class="kv-row"><span class="kv-label">Thuật toán ký</span><span class="kv-val mono">${esc(r.credential.proof.cryptosuite)}</span></div>
+    ${s.legacyProvenance ? `
+      <div class="kv-row"><span class="kv-label">Mã băm Sổ gốc</span><span class="kv-val mono">${esc(s.legacyProvenance.sourceDocumentDigest.slice(0, 28))}…</span></div>
+      <div class="kv-row"><span class="kv-label">Chữ ký Lãnh đạo</span><span class="kv-val mono">${esc(s.legacyProvenance.approverSignature.slice(0, 24))}…</span></div>
+    ` : ''}
+  `;
+  refreshSl();
+}
+
+async function refreshSl() {
+  const r = await apiFetch('/status/degree-list-1');
+  const slc = await r.json();
+  $('slInfo').innerHTML = `
+    <div class="kv-row"><span class="kv-label">ETag hiện tại</span><span class="kv-val mono">${esc(r.headers.get('etag') || '')}</span></div>
+    <div class="kv-row"><span class="kv-label">Chuỗi nén GZIP</span><span class="kv-val mono">${slc.credentialSubject.encodedList.length} ký tự (Multibase u)</span></div>
+  `;
+}
+
+$('btnDegree').onclick = async () => {
+  $('ctype').value = 'DegreeCredential'; renderClaims();
+  const res = await J('/api/issuer/issue-degree', {holderDid: did, subject: customSubject()});
+  if (res.status !== 201) {
+    $('issuerInfo').innerHTML = `<div class="banner-msg banner-bad mt-0">${esc(res.body.error || 'Lỗi phân quyền RBAC')}</div>`;
+    log(`RBAC Blocked [HTTP ${res.status}]: ${res.body.error}`, 'ev-bad');
+    return;
+  }
+  await receive(res.body);
+};
+$('btnCourse').onclick = async () => {
+  $('ctype').value = 'CourseCertificateCredential'; renderClaims();
+  const res = await J('/api/issuer/issue-course', {holderDid: did, subject: {studentName: customSubject().studentName}});
+  if (res.status !== 201) {
+    $('issuerInfo').innerHTML = `<div class="banner-msg banner-bad mt-0">${esc(res.body.error || 'Lỗi phân quyền RBAC')}</div>`;
+    log(`RBAC Blocked [HTTP ${res.status}]: ${res.body.error}`, 'ev-bad');
+    return;
+  }
+  await receive(res.body);
+};
+$('btnIngest').onclick = async () => {
+  const res = await J('/api/issuer/legacy/ingest', {holderDid: did, subject: customSubject()});
+  const r = res.body;
+  pendingLegacy = r.recordId;
+  $('btnApprove').disabled = false;
+  $('issuerInfo').innerHTML = `
+    <div class="subcard-title"><span>Hồ sơ Sổ gốc — Chờ Lãnh đạo duyệt</span><span class="tag tag-mandatory">PENDING_REVIEW</span></div>
+    <div class="kv-row"><span class="kv-label">Người nhập hồ sơ</span><span class="kv-val mono">${esc(r.verifiedBy || 'chuyenvien_daotao_01')}</span></div>
+    <div class="kv-row"><span class="kv-label">Kích thước tệp Scan</span><span class="kv-val mono">${r.scanBytes.toLocaleString()} bytes (2.4 MB)</span></div>
+    <div class="kv-row"><span class="kv-label">SHA-256 Digest</span><span class="kv-val mono">${esc(r.sourceDocumentDigest.slice(0, 34))}…</span></div>
+    <div class="muted mt-8">Hãy chuyển sang tài khoản <b>Trưởng phòng Đào tạo</b> và bấm <b>Bước 2: Lãnh đạo Ký duyệt</b>.</div>
+  `;
+};
+$('btnApprove').onclick = async () => {
+  const res = await J('/api/issuer/legacy/approve', {recordId: pendingLegacy});
+  if (res.status !== 201) {
+    $('issuerInfo').insertAdjacentHTML('beforeend', `<div class="banner-msg banner-bad">${esc(res.body.error || 'Lỗi phân quyền RBAC')}</div>`);
+    log(`RBAC Blocked [HTTP ${res.status}]: ${res.body.error}`, 'ev-bad');
+    return;
+  }
+  $('btnApprove').disabled = true;
+  $('ctype').value = 'DegreeCredential'; renderClaims();
+  await receive(res.body);
+};
+$('btnRevoke').onclick = async () => {
+  const id = $('credSel').value;
+  if (!id) return;
+  const r = await J('/api/issuer/revoke', {statusListIndex: indexOf[id]});
+  if (r.status !== 200) {
+    $('issuerInfo').insertAdjacentHTML('beforeend', `<div class="banner-msg banner-bad">${esc(r.body.error || 'Lỗi phân quyền RBAC')}</div>`);
+    log(`RBAC Blocked [HTTP ${r.status}]: ${r.body.error}`, 'ev-bad');
+    return;
+  }
+  $('issuerInfo').insertAdjacentHTML('beforeend',
+    `<div class="banner-msg banner-bad">Đã thu hồi văn bằng ở Index #${indexOf[id]} · ETag mới: <span class="mono">${esc(r.body.etag)}</span></div>`
+  );
+  refreshSl();
+};
+$('btnSl').onclick = refreshSl;
+
+// ---- Wallet Backup & Device Change Simulation ----
+$('btnBackupWallet').onclick = async () => {
+  walletBackupBundle = await (await apiFetch('/api/wallet/backup')).json();
+  $('btnRestoreWallet').disabled = false;
+  $('walletDeviceMsg').innerHTML = `<span class="text-success fw-500">Đã sao lưu Ví thành công (${walletBackupBundle.credentials.length} văn bằng + Khóa P-256).</span> Bạn có thể thử bấm "Đổi ĐT mới" rồi "Khôi phục Ví".`;
+};
+
+$('btnRotateDevice').onclick = async () => {
+  const r = (await J('/api/wallet/rotate-device', {})).body;
+  creds = {};
+  await refreshWallet();
+  $('vcCardType').textContent = 'THIẾT BỊ MỚI (ĐÃ ĐỔI ĐIỆN THOẠI)';
+  $('vcCardIndex').textContent = 'Ví trống';
+  $('vcCardTitle').textContent = 'Đã sinh cặp khóa P-256 did:key mới';
+  $('vcCardHolder').textContent = 'New DID: ' + r.newDid.slice(0, 36) + '…';
+  $('walletDeviceMsg').innerHTML = `<span class="text-warn fw-500">Đã mô phỏng đổi sang điện thoại mới!</span> DID mới: <span class="mono">${esc(r.newDid.slice(0, 24))}…</span>. Hãy bấm <b>Khôi phục Ví</b> (nếu đã sao lưu) hoặc định danh VNeID/SSO để Nhà trường cấp lại văn bằng vào DID mới.`;
+};
+
+$('btnRestoreWallet').onclick = async () => {
+  if (!walletBackupBundle) return;
+  const r = (await J('/api/wallet/restore', walletBackupBundle)).body;
+  await refreshWallet();
+  $('walletDeviceMsg').innerHTML = `<span class="text-success fw-500">Đã khôi phục nguyên vẹn khóa DID (${esc(r.did.slice(0, 20))}…) và ${r.count} văn bằng lên điện thoại mới.</span>`;
+};
+
+// ---- Verifier Flow ----
+function resetSteps() {
+  ['s1', 's2', 's3', 's4'].forEach((id, idx) => {
+    $(id).className = 'dot';
+    $('lat' + (idx + 1)).textContent = '–';
+  });
+  $('verifyMsg').style.display = 'none';
+  $('disclosed').textContent = '–';
+  $('btnScan').disabled = true;
+  $('scanBox').innerHTML = '';
+}
+
+$('cacheMode').onchange = () => J('/api/verifier/config', {mode: $('cacheMode').value, ttlSeconds: 300, invalidate: true});
+
+async function newRequest(claims) {
+  return (await J('/api/verifier/request', {
+    credentialType: $('ctype').value,
+    claims: claims || chosenClaims(),
+    verifierName: $('employerSel') ? $('employerSel').value : 'FPT Software (hr@fpt.com.vn)',
+    publicOrigin: location.origin
+  })).body;
+}
+
+function listen(state) {
+  if (es) es.close();
+  es = new EventSource(API_BASE + '/api/verifier/events?state=' + state);
+  es.addEventListener('VERIFICATION_COMPLETED', e => {
+    const d = JSON.parse(e.data);
+    applyOk(d.latency || {}, d);
+    log('VERIFICATION_COMPLETED · ' + JSON.stringify(d.latency), 'ev-ok');
+  });
+  es.addEventListener('ATTACK_DETECTED', e => {
+    const d = JSON.parse(e.data);
+    applyFail(d);
+    log(`ATTACK_DETECTED [${d.attackType}] HTTP ${d.httpStatus}: ${d.message}`, 'ev-bad');
+  });
+}
+
+const stepNo = {replay: 1, holder_binding: 2, issuer_proof: 3, status: 4, session: 1};
+
+function applyOk(t, d) {
+  ['s1', 's2', 's3', 's4'].forEach(i => $(i).className = 'dot ok');
+  $('lat1').textContent = `${(t.redisMs ?? 0).toFixed(2)} ms`;
+  $('lat2').textContent = `PoP OK`;
+  $('lat3').textContent = `${(t.cryptoMs ?? 0).toFixed(2)} ms`;
+  $('lat4').textContent = `${(t.statusMs ?? 0).toFixed(2)} ms`;
+  const msg = $('verifyMsg');
+  msg.style.display = 'block';
+  msg.className = 'banner-msg banner-ok';
+  msg.textContent = `Xác minh thành công 4/4 bước (Tổng độ trễ: ${((t.redisMs || 0) + (t.cryptoMs || 0) + (t.statusMs || 0)).toFixed(2)} ms)`;
+  $('disclosed').textContent = JSON.stringify(d.disclosedClaims, null, 2);
+  if (d.legacyDocument) {
+    $('btnScan').disabled = false;
+    $('btnScan').dataset.url = new URL(d.legacyDocument).pathname;
+  }
+}
+
+function applyFail(d) {
+  const f = stepNo[d.step] || 1;
+  for (let i = 1; i <= 4; i++) {
+    $('s' + i).className = i < f ? 'dot ok' : (i === f ? 'dot bad' : 'dot');
+  }
+  const msg = $('verifyMsg');
+  msg.style.display = 'block';
+  msg.className = 'banner-msg banner-bad';
+  msg.textContent = `Bị từ chối ở bước ${f} (HTTP ${d.httpStatus} · ${d.attackType}): ${d.message}`;
+}
+
+$('btnScan').onclick = async () => {
+  const r = await apiFetch($('btnScan').dataset.url);
+  $('scanBox').innerHTML = await r.text();
+  const svg = $('scanBox').querySelector('svg');
+  if (svg) { svg.style.width = '100%'; svg.style.height = 'auto'; svg.style.borderRadius = '4px'; }
+};
+
+$('btnRequest').onclick = async () => {
+  resetSteps();
+  const r = await newRequest();
+  request = r.request;
+  $('qrBox').style.display = 'flex';
+  $('qrImg').src = r.qrDataUrl;
+  $('requestUri').textContent = r.request_uri;
+  listen(request.state);
+
+  const sc = await J('/api/wallet/scan', {request_uri: r.request_uri});
+  request = sc.body.request;
+  const credentialId = $('credSel').value;
+  if (!credentialId) {
+    $('walletEmpty').style.display = 'block';
+    $('walletEmpty').textContent = 'Ví chưa có chứng chỉ nào — hãy cấp phát văn bằng ở cột 1 trước.';
+    return;
+  }
+  preview = (await J('/api/wallet/preview', {request, credentialId})).body;
+  $('walletEmpty').style.display = 'none';
+  $('walletPreview').style.display = 'block';
+  $('verifierName').innerHTML = `Đơn vị tuyển dụng: <b>${esc(request.verifier_name || 'FPT Software')}</b><br><span class="mono">client_id: ${esc(request.client_id)}</span>`;
+
+  const row = (k, cls, tag, extra) => `
+    <div class="kv-row">
+      <span>${extra || ''}${label[k] || k}</span>
+      <span class="tag ${cls}">${tag}</span>
+    </div>`;
+
+  $('previewList').innerHTML =
+    `<div class="claim-group-title">1. Thuộc tính Bắt buộc (Mandatory Pointers)</div>` +
+    preview.mandatory.map(k => row(k, 'tag-mandatory', 'Bắt buộc', '<input type="checkbox" checked disabled> ')).join('') +
+    `<div class="claim-group-title">2. Thuộc tính Yêu cầu (Người học tự quyết định)</div>` +
+    (preview.requestedOptional.map(k => row(k, 'tag-selective', 'Tiết lộ chọn lọc', `<input type="checkbox" data-claim="${k}" checked> `)).join('') || '<div class="muted">Không yêu cầu thêm</div>') +
+    `<div class="claim-group-title">3. Thuộc tính Bảo mật (Ẩn bằng ECDSA-SD-2023)</div>` +
+    preview.hidden.map(k => row(k, 'tag-redacted', 'Đã ẩn mật mã')).join('');
+};
+
+$('btnReject').onclick = () => {
+  $('walletPreview').style.display = 'none';
+  $('walletEmpty').style.display = 'block';
+  $('walletEmpty').textContent = 'Người học đã từ chối chia sẻ — không có gói tin nào được gửi đi.';
+};
+
+const approved = () => [...document.querySelectorAll('#previewList input[data-claim]:checked')].map(i => i.dataset.claim);
+
+$('btnConsent').onclick = async () => {
+  const r = await J('/api/wallet/present', {
+    request,
+    credentialId: $('credSel').value,
+    consent: true,
+    approvedClaims: approved(),
+    submit: true
+  });
+  lastBody = r.body;
+  $('walletPreview').style.display = 'none';
+  $('walletEmpty').style.display = 'block';
+  $('walletEmpty').innerHTML = `Đã tạo Derived VC (<b>${r.body.deriveMs.toFixed(1)} ms</b>) &amp; ký Holder Binding (<b>${r.body.signMs.toFixed(1)} ms</b>) → Phản hồi HTTP <b>${r.body.submitted?.status}</b>`;
+  setTab(2);
+};
+
+// ---- Live JSON Inspector ----
+function setTab(n) {
+  tab = n;
+  ['tab1', 'tab2', 'tab3'].forEach((id, i) => $(id).className = (i + 1 === n) ? 'active' : '');
+  showTabContent();
+}
+$('tab1').onclick = () => setTab(1);
+$('tab2').onclick = () => setTab(2);
+$('tab3').onclick = () => setTab(3);
+$('credSel').onchange = updateVcCard;
+
+async function showTabContent() {
+  if (tab === 1) {
+    const id = $('credSel').value;
+    if (!id) { $('diff').textContent = 'Chưa có văn bằng nào trong Ví.'; return; }
+    const vc = creds[id] || await (await apiFetch('/api/wallet/credential/' + id)).json();
+    $('diff').textContent = JSON.stringify(vc, null, 2);
+  } else if (tab === 2) {
+    if (!lastBody) { $('diff').textContent = 'Hãy thực hiện "Chấp thuận & Ký VP" để xem gói tin vp_token gửi qua mạng.'; return; }
+    const vp = lastBody.vp_token.cred[0];
+    const vcx = vp.verifiableCredential[0];
+    $('diff').textContent = JSON.stringify({
+      holder: vp.holder,
+      disclosedCredentialSubject: vcx.credentialSubject,
+      issuerDerivedProof: {
+        cryptosuite: vcx.proof.cryptosuite,
+        verificationMethod: vcx.proof.verificationMethod,
+        proofValue: vcx.proof.proofValue.slice(0, 64) + '…'
+      },
+      outerHolderBindingProof: {
+        cryptosuite: vp.proof.cryptosuite,
+        proofPurpose: vp.proof.proofPurpose,
+        challenge: vp.proof.challenge,
+        domain: vp.proof.domain,
+        proofValue: vp.proof.proofValue
+      }
+    }, null, 2);
+  } else if (tab === 3) {
+    const didDoc = await (await apiFetch('/.well-known/did.json')).json();
+    $('diff').textContent = JSON.stringify(didDoc, null, 2);
+  }
+}
+
+// ---- Attack Simulator ----
+async function freshVp(simulate) {
+  if (!$('credSel').value) {
+    await receive((await J('/api/issuer/issue-degree', {holderDid: did})).body);
+  }
+  resetSteps();
+  const r = await newRequest();
+  listen(r.request.state);
+  const out = await J('/api/wallet/present', {
+    request: r.request,
+    credentialId: $('credSel').value,
+    consent: true,
+    simulate
+  });
+  return {request: r.request, out: out.body};
+}
+
+const sendVp = (o, body) => J('/api/verifier/direct-post', body || {state: o.out.state, vp_token: o.out.vp_token});
+const report = t => { $('attackOut').textContent = t; };
+
+$('aReplay').onclick = async () => {
+  const o = await freshVp('normal');
+  const t0 = performance.now();
+  const rs = await Promise.all(Array.from({length: 200}, () => sendVp(o)));
+  const c = {};
+  rs.forEach(r => c[r.status] = (c[r.status] || 0) + 1);
+  report(`[Kịch bản 1: Replay Attack 200 luồng đồng thời]\nThời gian xử lý: ${(performance.now() - t0).toFixed(0)} ms\nPhân bố mã HTTP: ${JSON.stringify(c)}\n→ Đúng 1 yêu cầu được chấp nhận (HTTP 200), 199 yêu cầu bị Redis SET NX EX chặn đứng (HTTP 409 Conflict).`);
+};
+
+$('aTamper').onclick = async () => {
+  const o = await freshVp('normal');
+  const vcx = o.out.vp_token.cred[0].verifiableCredential[0];
+  if (vcx.credentialSubject.major) vcx.credentialSubject.major = 'Khoa học máy tính (Đã sửa trái phép)';
+  else vcx.credentialSubject.studentName = 'Người lạ sửa tên';
+  const r = await sendVp(o);
+  report(`[Kịch bản 2: Tamper Payload]\nKết quả: HTTP ${r.status}\n` + JSON.stringify(r.body, null, 2));
+};
+
+$('aSpoof').onclick = async () => {
+  const o = await freshVp('attacker-key');
+  const r = await sendVp(o);
+  report(`[Kịch bản 3: Holder Binding Spoof (Kẻ tấn công đánh cắp Derived VC và ký bằng khóa riêng của mình)]\nKết quả: HTTP ${r.status}\n` + JSON.stringify(r.body, null, 2));
+};
+
+$('aCross').onclick = async () => {
+  const o = await freshVp('wrong-audience');
+  const r = await sendVp(o);
+  report(`[Kịch bản 4: Cross-Verifier Replay (Đem VP của Công ty A sang trình bày tại Công ty B)]\nKết quả: HTTP ${r.status}\n` + JSON.stringify(r.body, null, 2));
+};
+
+$('aRevoked').onclick = async () => {
+  if (!$('credSel').value) {
+    await receive((await J('/api/issuer/issue-degree', {holderDid: did})).body);
+  }
+  await $('btnRevoke').onclick();
+  const o = await freshVp('normal');
+  const r = await sendVp(o);
+  report(`[Kịch bản 5: Trình bày văn bằng vừa bị thu hồi trên BitstringStatusList]\nKết quả: HTTP ${r.status}\n` + JSON.stringify(r.body, null, 2));
+};
+
+(async () => {
+  renderClaims();
+  $('ctype').onchange = renderClaims;
+  await refreshWallet();
+  refreshSl().catch(() => {});
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+</script>
+</body>
+</html>
