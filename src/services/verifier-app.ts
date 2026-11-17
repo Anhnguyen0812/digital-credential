@@ -14,7 +14,9 @@ import {checkHolderIdentity} from '../crypto/holder-binding.js';
 import {verifyLegacyProvenanceSignature} from '../crypto/provenance-signer.js';
 import {RedisReplayGuard} from '../infra/redis-replay-guard.js';
 import {VerifierStatusCache, StatusCacheMode} from '../status/status-store.js';
-import {readBody, send, preflight, serveStatic} from './http-util.js';
+import {HttpError} from '../portal/router.js';
+import {PRESENTATION_PROFILES, checkPresentationProfile, type CredentialProfile} from '../profiles/presentation-policy.js';
+import {readBody, readPresentationResponse, RequestBodyError, send, preflight, serveStatic} from './http-util.js';
 import {signReceipt} from './receipt-token.js';
 import {didWebFromUrl} from './issuer-app.js';
 import {createDocStore, DocStore} from '../infra/doc-store.js';
@@ -31,19 +33,15 @@ export interface VerifierOptions {
   statusMode?: StatusCacheMode;
   statusTtlSeconds?: number;
   verifierName?: string;
+  demoMode?: boolean;
 }
-
-const BASE_MANDATORY: Record<string, string[]> = {
-  DegreeCredential: ['studentName', 'graduated'],
-  CourseCertificateCredential: ['studentName', 'courseName', 'certificateValid']
-};
 
 export type AttackType = 'REPLAY' | 'TAMPER' | 'HOLDER_SPOOF' | 'REVOKED' | 'EXPIRED' | 'SESSION' | 'UNTRUSTED_ISSUER' | 'INCOMPLETE';
 
 export async function createVerifierApp(opts: VerifierOptions = {}) {
   const port = opts.port ?? 4002;
-  const publicUrl = opts.publicUrl ?? `http://localhost:${port}`;
-  const issuerPublicUrl = opts.issuerPublicUrl ?? 'http://localhost:4001';
+  const publicUrl = opts.publicUrl?.replace(/\/+$/, '') ?? `http://localhost:${port}`;
+  const issuerPublicUrl = opts.issuerPublicUrl?.replace(/\/+$/, '') ?? 'http://localhost:4001';
   const issuerInternalUrl = opts.issuerInternalUrl ?? issuerPublicUrl;
   const issuerDid = didWebFromUrl(issuerPublicUrl);
   const sessionTtl = opts.sessionTtlSeconds ?? 300;
@@ -57,22 +55,42 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
   const guard = opts.redis ?? RedisReplayGuard.fromEnv(sessionTtl);
   await guard.connect();
 
-  const statusCache = new VerifierStatusCache(async (ifNoneMatch) => {
-    const r = await fetch(`${issuerInternalUrl}/status/degree-list-1`, {headers: ifNoneMatch ? {'If-None-Match': ifNoneMatch} : {}});
-    return {status: r.status, etag: r.headers.get('etag') ?? undefined, body: r.status === 200 ? await r.json() : undefined};
-  }, documentLoader, {mode: opts.statusMode ?? 'ETAG_REVALIDATE', ttlMs: (opts.statusTtlSeconds ?? 300) * 1000});
-
+  function makeCache(purpose: 'revocation' | 'suspension') {
+    const pathname = '/status/degree-list-1' + (purpose === 'suspension' ? '-suspension' : '');
+    return new VerifierStatusCache(async etag => {
+      const r = await fetch(issuerInternalUrl + pathname, {
+        headers: etag ? {'If-None-Match': etag} : {}, redirect: 'error', signal: AbortSignal.timeout(5000)
+      });
+      return {status: r.status, etag: r.headers.get('etag') ?? undefined, body: r.status === 200 ? await r.json() : undefined};
+    }, documentLoader, {mode: opts.statusMode ?? 'ETAG_REVALIDATE', ttlMs: (opts.statusTtlSeconds ?? 300) * 1000},
+      {url: issuerPublicUrl + pathname, issuer: issuerDid, purpose});
+  }
+  const statusCache = makeCache('revocation');
+  const suspensionCache = makeCache('suspension');
   const docs = opts.docs ?? await createDocStore({postgresUrl: process.env.POSTGRES_URL, table: 'verifier_documents'});
-  const portal = await createVerifierPortal({docs, statusCache});
+  const demoMode = opts.demoMode === true && docs.mode === 'memory';
+  const portal = await docs.atomic(() => createVerifierPortal({docs, statusCache, suspensionCache}));
 
   const sessions = new Map<string, any>();
-  let latestState: string | null = null;
+  function liveSession(state: string) {
+    const session = sessions.get(state);
+    if(session && Date.now() >= session.expiresAt) sessions.delete(state);
+    return sessions.get(state);
+  }
+
+  async function ownedSession(req: http.IncomingMessage, state: string) {
+    const session = liveSession(state);
+    if(demoMode && session?.orgId === 'demo') return session;
+    const user = await portal.need({req}, 'history.read');
+    if(!session || session.orgId !== user.orgId) throw new HttpError(404, 'Không tìm thấy phiên xác minh');
+    return session;
+  }
   const broker = new EventEmitter();
   broker.setMaxListeners(0);
 
   function emit(state: string, event: string, data: any) {
     const s = sessions.get(state);
-    if(s) s.events.push({event, data});
+    if(s && s.events.length < 32) s.events.push({event, data});
     broker.emit('evt:' + state, {event, data});
   }
 
@@ -80,7 +98,7 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
     const body = {verified: false, step, reason, attackType, httpStatus: status, timings};
     emit(state, 'ATTACK_DETECTED', {verified: false, attackType, httpStatus: status, step, message: reason, timings});
     const s = sessions.get(state);
-    if (s) {
+    if (s && s.events.length < 32 && attackType !== 'REPLAY') {
       portal.recordVerification({
         state: `${state}-${Date.now()}`,
         at: new Date().toISOString(),
@@ -108,12 +126,22 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
 
       // ---- Tao yeu cau OpenID4VP + DCQL + QR ----
       if(req.method === 'POST' && url.pathname === '/api/verifier/request') {
-        const body = await readBody(req);
-        const type = body.credentialType === 'CourseCertificateCredential' ? 'CourseCertificateCredential' : 'DegreeCredential';
-        const wanted: string[] = Array.isArray(body.claims) ? body.claims : [];
+        const user = !demoMode || req.headers.cookie?.includes('rp_sid=')
+          ? await portal.need({req}, 'request.create') : undefined;
+        const body = await readBody(req, 16_000);
+        const type = body.credentialType ?? 'DegreeCredential';
+        if(typeof type !== 'string' || !Object.hasOwn(PRESENTATION_PROFILES, type)) throw new HttpError(400, 'Loại văn bằng không được hỗ trợ');
+        const profile = PRESENTATION_PROFILES[type as CredentialProfile];
+        const wanted: string[] = body.claims ?? [];
+        if(!Array.isArray(wanted) || wanted.length > 20 ||
+          wanted.some(claim => !profile.optional.includes(claim) && !profile.required.includes(claim))) {
+          throw new HttpError(400, 'Yêu cầu thuộc tính ngoài profile');
+        }
+        for(const state of sessions.keys()) liveSession(state);
+        if(sessions.size >= 1000) throw new HttpError(429, 'Đã đạt giới hạn phiên xác minh');
         const state = randomUUID();
         const nonce = randomBytes(16).toString('base64url');
-        const claimNames = [...new Set([...BASE_MANDATORY[type], ...wanted])];
+        const claimNames = [...new Set([...profile.required, ...wanted])];
         const dcql_query = {
           credentials: [{
             id: 'cred',
@@ -122,10 +150,7 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
             claims: claimNames.map(c => ({id: c, path: ['credentialSubject', c]}))
           }]
         };
-        const rpSession = portal.sessions.get(req);
-        const sessionVerifierName = typeof body.verifierName === 'string' && body.verifierName.trim()
-          ? body.verifierName.trim()
-          : (rpSession ? `${rpSession.user.orgName} (${rpSession.user.email})` : verifierName);
+        const sessionVerifierName = user ? user.orgName : verifierName;
         const request = {
           response_type: 'vp_token', response_mode: 'direct_post', client_id: clientId,
           verifier_name: sessionVerifierName,
@@ -134,35 +159,26 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
         sessions.set(state, {
           request, type, wanted,
           verifierName: sessionVerifierName,
-          orgId: rpSession?.user.orgId || 'fpt',
-          requestedBy: rpSession?.user.username || 'demo',
+          orgId: user?.orgId || 'demo',
+          requestedBy: user?.username || 'demo',
           expiresAt: Date.now() + sessionTtl * 1000, events: [], done: false
         });
-        latestState = state;
-        const baseForQr = typeof body.publicOrigin === 'string' && body.publicOrigin.startsWith('http')
-          ? body.publicOrigin.replace(/\/+$/, '')
-          : publicUrl;
-        const request_uri = `${baseForQr}/api/verifier/request/${state}`;
+        const request_uri = publicUrl + '/api/verifier/request/' + state;
         const qrPayload = `openid4vp://?client_id=${encodeURIComponent(clientId)}&request_uri=${encodeURIComponent(request_uri)}`;
         const qrDataUrl = await QRCode.toDataURL(qrPayload, {margin: 1, width: 280});
         return send(res, 201, {request, request_uri, qrPayload, qrDataUrl});
       }
 
-      if(req.method === 'GET' && url.pathname === '/api/verifier/latest') {
-        const s = latestState ? sessions.get(latestState) : null;
-        if(!s) return send(res, 404, {error: 'chua co phien nao'});
-        return send(res, 200, {state: latestState, request: s.request, request_uri: `${publicUrl}/api/verifier/request/${latestState}`});
-      }
-
       let m = /^\/api\/verifier\/request\/([\w-]+)$/.exec(url.pathname);
       if(req.method === 'GET' && m) {
-        const s = sessions.get(m[1]);
-        return s ? send(res, 200, s.request) : send(res, 404, {error: 'state khong ton tai'});
+        const s = liveSession(m[1]);
+        return s && !s.done ? send(res, 200, s.request, {'Cache-Control': 'no-store'}) : send(res, 404, {error: 'state khong ton tai'});
       }
 
       // ---- SSE ----
       if(req.method === 'GET' && url.pathname === '/api/verifier/events') {
         const state = url.searchParams.get('state') || '';
+        const session = await ownedSession(req, state);
         res.writeHead(200, {
           'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive',
           'Access-Control-Allow-Origin': '*', 'X-Accel-Buffering': 'no'
@@ -173,26 +189,34 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
         const listener = (e: any) => write(e);
         broker.on('evt:' + state, listener);
         const ka = setInterval(() => res.write(': ping\n\n'), 15000);
-        req.on('close', () => { clearInterval(ka); broker.off('evt:' + state, listener); });
+        const expiry = setTimeout(() => res.end(), Math.max(0, session.expiresAt - Date.now()));
+        res.on('close', () => { clearTimeout(expiry); clearInterval(ka); broker.off('evt:' + state, listener); });
         return;
       }
 
       // ---- Cau hinh cache trang thai (danh doi rieng tu vs do tuoi) ----
       if(req.method === 'POST' && url.pathname === '/api/verifier/config') {
-        const body = await readBody(req);
-        if(body.mode === 'TTL_ONLY' || body.mode === 'ETAG_REVALIDATE') statusCache.setMode(body.mode);
-        if(typeof body.ttlSeconds === 'number') statusCache.setTtl(body.ttlSeconds * 1000);
-        if(body.invalidate) statusCache.invalidate();
+        if(!demoMode) await portal.need({req}, 'config.manage');
+        const body = await readBody(req, 4096);
+        if(body.ttlSeconds !== undefined && (!Number.isInteger(body.ttlSeconds) || body.ttlSeconds < 1 || body.ttlSeconds > 300)) {
+          throw new HttpError(400, 'TTL cần nằm trong khoảng 1 đến 300 giây');
+        }
+        for(const cache of [statusCache, suspensionCache]) {
+          if(body.mode === 'TTL_ONLY' || body.mode === 'ETAG_REVALIDATE') cache.setMode(body.mode);
+          if(body.ttlSeconds !== undefined) cache.setTtl(body.ttlSeconds * 1000);
+          if(body.invalidate) cache.invalidate();
+        }
         return send(res, 200, {mode: statusCache.getMode(), counters: statusCache.counters});
       }
       if(req.method === 'GET' && url.pathname === '/api/verifier/metrics') {
+        if(!demoMode) await portal.need({req}, 'config.manage');
         return send(res, 200, {status: {mode: statusCache.getMode(), ...statusCache.counters}, sessions: sessions.size});
       }
 
       // ---- Xem ban scan so goc (proxy qua Verifier voi Receipt Token) ----
       m = /^\/api\/verifier\/legacy-scan\/([\w-]+)$/.exec(url.pathname);
       if(req.method === 'GET' && m) {
-        const s = sessions.get(m[1]);
+        const s = await ownedSession(req, m[1]);
         if(!s?.receipt || !s.legacyDigest) return send(res, 403, {error: 'chua co bien lai xac minh hop le cho phien nay'});
         const r = await fetch(`${issuerInternalUrl}/api/legacy/document/${encodeURIComponent(s.legacyDigest)}`, {headers: {Authorization: `Bearer ${s.receipt}`}});
         const svg = await r.text();
@@ -202,25 +226,23 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
 
       // ---- direct_post: xac minh tuan tu ----
       if(req.method === 'POST' && url.pathname === '/api/verifier/direct-post') {
-        const body = await readBody(req);
+        const body = await readPresentationResponse(req, demoMode);
         const timings: Record<string, number> = {};
         const state = body.state;
-        const session = sessions.get(state);
+        const session = typeof state === 'string' ? liveSession(state) : undefined;
         if(!session) return send(res, 400, {verified: false, step: 'session', reason: 'state khong ton tai', attackType: 'SESSION'});
-        if(Date.now() > session.expiresAt) return fail(state, 400, 'SESSION', 'session', 'phien da het han', timings, res);
+        if(session.done) return fail(state, 409, 'REPLAY', 'replay', 'Phiên đã hoàn tất', timings, res);
+        if(session.attempts >= 250) throw new HttpError(429, 'Đã đạt giới hạn lượt gửi');
+        session.attempts = (session.attempts ?? 0) + 1;
 
-        const vpEntry = body.vp_token?.[session.request.dcql_query.credentials[0].id];
-        const vp = Array.isArray(vpEntry) ? vpEntry[0] : vpEntry;
-        if(!vp) return fail(state, 400, 'TAMPER', 'session', 'vp_token thieu', timings, res);
+        const token = body.vp_token;
+        const entries = token?.[session.request.dcql_query.credentials[0].id];
+        const vp = Array.isArray(entries) && entries.length === 1 ? entries[0] : undefined;
+        if(!vp || Object.keys(token).length !== 1 || !Array.isArray(vp.verifiableCredential) || vp.verifiableCredential.length !== 1) {
+          return fail(state, 400, 'TAMPER', 'session', 'Cần một bản trình bày chứa đúng một văn bằng', timings, res);
+        }
         const {nonce, client_id} = session.request;
-
-        // BUOC 1: Anti-Replay (Redis SET NX EX)
-        let t = performance.now();
-        const first = await guard.consume(nonce, client_id);
-        timings.redisMs = performance.now() - t;
-        if(!first) return fail(state, 409, 'REPLAY', 'replay', 'nonce da duoc su dung (Redis SET NX EX)', timings, res);
-
-        // BUOC 2a: rang buoc dinh danh vp.holder === credentialSubject.id
+        let t: number;
         const identity = checkHolderIdentity(vp);
         if(!identity.verified) return fail(state, 401, 'HOLDER_SPOOF', 'holder_binding', identity.reason!, timings, res);
         const credential = identity.derivedVc;
@@ -228,7 +250,9 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
         if(credential.issuer !== issuerDid && credential.issuer?.id !== issuerDid) {
           return fail(state, 400, 'UNTRUSTED_ISSUER', 'issuer_proof', 'issuer khong nam trong danh sach tin cay', timings, res);
         }
-        if(credential.validUntil && Date.parse(credential.validUntil) < Date.now()) {
+        if(!Number.isFinite(Date.parse(credential.validFrom)) || Date.parse(credential.validFrom) > Date.now() ||
+          (session.type === 'CourseCertificateCredential' && !credential.validUntil) ||
+          (credential.validUntil && (!Number.isFinite(Date.parse(credential.validUntil)) || Date.parse(credential.validUntil) <= Date.now()))) {
           return fail(state, 400, 'EXPIRED', 'issuer_proof', `chung chi da het han (validUntil=${credential.validUntil})`, timings, res);
         }
 
@@ -251,9 +275,8 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
 
         // BUOC 3b: du lieu yeu cau + nguon goc so goc (neu la bang cap lai)
         const subject = credential.credentialSubject;
-        const required = [...new Set([...BASE_MANDATORY[session.type], ...session.wanted])];
-        const missing = required.filter(c => subject[c] === undefined);
-        if(missing.length) return fail(state, 400, 'INCOMPLETE', 'issuer_proof', `thieu claim theo dcql_query: ${missing.join(', ')}`, timings, res);
+        const issue = checkPresentationProfile(credential, session.type, session.wanted);
+        if(issue) return fail(state, 400, 'INCOMPLETE', 'issuer_proof', issue, timings, res);
         let legacyDigest: string | undefined;
         if(subject.legacyProvenance) {
           const prov = subject.legacyProvenance;
@@ -269,9 +292,28 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
 
         // BUOC 4: Bitstring Status List (ETag / TTL cache)
         t = performance.now();
-        const status = await statusCache.check(credential);
+        const entriesToCheck = Array.isArray(credential.credentialStatus) ? credential.credentialStatus : [credential.credentialStatus];
+        const revocation = entriesToCheck.find(entry => entry?.statusPurpose === 'revocation');
+        const suspension = entriesToCheck.find(entry => entry?.statusPurpose === 'suspension');
+        if(!revocation || (Array.isArray(credential.credentialStatus) && (!suspension || entriesToCheck.length !== 2 ||
+          revocation.statusListIndex !== suspension.statusListIndex))) {
+          return fail(state, 400, 'INCOMPLETE', 'status', 'Cấu trúc trạng thái không hợp lệ', timings, res);
+        }
+        let status: Awaited<ReturnType<VerifierStatusCache['check']>>;
+        try {
+          status = await statusCache.check({credentialStatus: revocation});
+          if(status.verified && suspension) status = await suspensionCache.check({credentialStatus: suspension});
+        } catch {
+          throw new HttpError(503, 'Không kiểm tra được danh sách trạng thái');
+        }
         timings.statusMs = performance.now() - t;
         if(!status.verified) return fail(state, 400, 'REVOKED', 'status', status.reason!, timings, res);
+        if(!liveSession(state)) throw new HttpError(400, 'Phiên đã hết hạn');
+        t = performance.now();
+        const first = await guard.consume(nonce, client_id);
+        timings.redisMs = performance.now() - t;
+        if(!first) return fail(state, 409, 'REPLAY', 'replay', 'Phiên đã hoàn tất', timings, res);
+        session.done = true;
 
         const activeVerifierName = session.verifierName || verifierName;
         const receipt = signReceipt({aud: activeVerifierName, digest: legacyDigest, exp: Math.floor(Date.now() / 1000) + 600});
@@ -281,7 +323,7 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
         await portal.recordVerification({
           state,
           at: new Date().toISOString(),
-          orgId: session.orgId || 'fpt',
+          orgId: session.orgId || 'demo',
           verifierName: activeVerifierName,
           requestedBy: session.requestedBy || 'demo',
           credentialType: session.type,
@@ -301,14 +343,15 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
       if(await portal.router.handle(req, res, url)) return;
 
       const publicDir = path.resolve(process.cwd(), 'public');
+      if(!demoMode && ['/index.html', '/demo'].includes(url.pathname)) return send(res, 404, {error: 'not found'});
       if(req.method === 'GET' && serveStatic(res, publicDir, url.pathname, 'verifier.html')) return;
       return send(res, 404, {error: 'not found'});
     } catch(err: any) {
-      return send(res, 500, {error: err?.message || String(err)});
+      return send(res, err instanceof HttpError || err instanceof RequestBodyError ? err.status : err?.status === 503 ? 503 : 500, {error: err instanceof HttpError || err instanceof RequestBodyError ? err.message : 'Không xử lý được yêu cầu xác minh'});
     }
   });
 
-  await new Promise<void>(r => server.listen(port, '0.0.0.0', r));
+  await new Promise<void>(r => server.listen(port, opts.demoMode ? '127.0.0.1' : '0.0.0.0', r));
   return {
     server, baseUrl: publicUrl, clientId, issuerDid, statusCache, guard, documentLoader, docs,
     close: async () => { guard.close(); server.closeAllConnections?.(); await new Promise<void>(r => server.close(() => r())); await docs.close(); }

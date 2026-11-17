@@ -1,8 +1,10 @@
+import {serviceOptions} from './runtime-config.js';
 import {createVerifierApp} from './verifier-app.js';
 
 const port = Number(process.env.PORT) || 4002;
 const mode = process.env.STATUS_CACHE_MODE === 'TTL_ONLY' ? 'TTL_ONLY' : 'ETAG_REVALIDATE';
 const app = await createVerifierApp({
+  ...serviceOptions('verifier'),
   port,
   publicUrl: process.env.VERIFIER_PUBLIC_URL || `http://localhost:${port}`,
   issuerPublicUrl: process.env.ISSUER_PUBLIC_URL || 'http://localhost:4001',

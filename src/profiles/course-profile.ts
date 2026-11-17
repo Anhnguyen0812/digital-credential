@@ -1,3 +1,4 @@
+import {statusEntry} from '../status/status-store.js';
 import {EDUCATION_CONTEXT_URL} from '../context/education-v1.js';
 
 export const COURSE_MANDATORY_POINTERS = [
@@ -23,6 +24,7 @@ export function buildUnsignedCourseVc(params: {
   holderDid: string;
   statusListIndex: number;
   statusListUrl: string;
+  suspensionListUrl?: string;
   issuerDid?: string;
   validFrom?: string;
   validUntil?: string;
@@ -34,15 +36,11 @@ export function buildUnsignedCourseVc(params: {
     issuer: params.issuerDid ?? 'did:web:university.edu.vn',
     validFrom: params.validFrom ?? '2026-01-15T00:00:00Z',
     validUntil: params.validUntil ?? '2028-01-15T00:00:00Z',
-    credentialStatus: {
-      id: `${params.statusListUrl}#${params.statusListIndex}`,
-      type: 'BitstringStatusListEntry',
-      statusPurpose: 'revocation',
-      statusListIndex: String(params.statusListIndex),
-      statusListCredential: params.statusListUrl
-    },
+    credentialStatus: params.suspensionListUrl ? [
+      statusEntry(params.statusListUrl, params.statusListIndex, 'revocation'),
+      statusEntry(params.suspensionListUrl, params.statusListIndex, 'suspension')
+    ] : statusEntry(params.statusListUrl, params.statusListIndex, 'revocation'),
     credentialSubject: {
-      id: params.holderDid,
       studentName: 'Nguyễn Phi Anh',
       courseCode: 'INT3306',
       courseName: 'An toàn và Bảo mật Hệ thống Thông tin',
@@ -51,7 +49,8 @@ export function buildUnsignedCourseVc(params: {
       grade: 'A+',
       skills: ['W3C Verifiable Credentials', 'Applied Cryptography', 'Zero Trust'],
       certificateValid: true,
-      ...(params.subject ?? {})
+      ...(params.subject ?? {}),
+      id: params.holderDid
     }
   };
 }

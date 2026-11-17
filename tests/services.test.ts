@@ -32,9 +32,9 @@ async function presentAndPost(credentialId: string, claims = ['major'], simulate
 
 beforeAll(async () => {
   wallet = await WalletClient.create();
-  issuer = await createIssuerApp({port: 4911, publicUrl: ISSUER});
-  verifier = await createVerifierApp({port: 4912, publicUrl: VERIFIER, issuerPublicUrl: ISSUER, issuerInternalUrl: ISSUER});
-  walletApp = await createWalletApp({port: 3913, issuerPublicUrl: ISSUER, verifierPublicUrl: VERIFIER, wallet});
+  issuer = await createIssuerApp({demoMode: true, port: 4911, publicUrl: ISSUER});
+  verifier = await createVerifierApp({demoMode: true, port: 4912, publicUrl: VERIFIER, issuerPublicUrl: ISSUER, issuerInternalUrl: ISSUER});
+  walletApp = await createWalletApp({demoMode: true, port: 3913, issuerPublicUrl: ISSUER, verifierPublicUrl: VERIFIER, wallet});
 });
 afterAll(async () => {
   await walletApp?.close(); await verifier?.close(); await issuer?.close();
@@ -159,4 +159,20 @@ describe('W5 - Kien truc 3 mien tach roi (Issuer 4001 / Verifier 4002 / Wallet 3
     const pr = await post('http://localhost:3913/api/wallet/present', {request, credentialId: iss.body.recordId, consent: true, submit: true});
     expect(pr.body.submitted.status).toBe(200);
   });
+
+  test('Trình bày không đạt chính sách vẫn cho phép hoàn tất phiên hợp lệ', async () => {
+    const {recordId} = await issueDegree();
+    const request = await newRequest(['major']);
+    const incomplete = await wallet.present({request, credentialId: recordId, approvedClaims: [], consent: true});
+    const submit = (vp_token: any) => fetch(VERIFIER + '/api/verifier/direct-post', {
+      method: 'POST', body: new URLSearchParams({state: request.state, vp_token: JSON.stringify(vp_token)})
+    });
+    const rejected = await submit(incomplete.vp_token);
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()).attackType).toBe('INCOMPLETE');
+    const eligible = await wallet.present({request, credentialId: recordId, approvedClaims: ['major'], consent: true});
+    expect((await submit(eligible.vp_token)).status).toBe(200);
+    expect((await submit(eligible.vp_token)).status).toBe(409);
+  });
+
 });

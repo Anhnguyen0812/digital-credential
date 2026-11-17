@@ -1,7 +1,9 @@
+import {serviceOptions} from './runtime-config.js';
 import {createWalletApp} from './wallet-app.js';
 
 const port = Number(process.env.PORT) || 3000;
 await createWalletApp({
+  ...serviceOptions('wallet'),
   port,
   issuerPublicUrl: process.env.ISSUER_PUBLIC_URL || 'http://localhost:4001',
   verifierPublicUrl: process.env.VERIFIER_PUBLIC_URL || 'http://localhost:4002',

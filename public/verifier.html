@@ -3,93 +3,75 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cổng Xác minh Tuyển dụng Doanh nghiệp — OpenID4VP Relying Party</title>
+<title>Tuyển dụng · Văn bằng số</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/portal.css">
 </head>
 <body>
 
-<!-- Global Navigation Bar -->
-<div class="global-bar">
-  <div class="global-bar-left">
-    <span class="global-pill">OpenID4VP Relying Party</span>
-    <span>Cổng Xác minh Văn bằng Tuyển dụng Doanh nghiệp</span>
-  </div>
-  <nav class="global-nav">
-    <a href="/issuer.html">1. Web Nhà trường <span class="port-tag">:4001</span></a>
-    <a href="/wallet.html">2. Web Ví Sinh viên <span class="port-tag">:3000</span></a>
-    <a href="/verifier.html" class="active">3. Web Tuyển dụng <span class="port-tag">:4002</span></a>
-    <a href="/index.html">Bàn Demo Hội đồng &amp; Tấn công</a>
-  </nav>
-</div>
+<header class="portal-topbar">
+  <a class="portal-brand" href="/verifier.html">
+    <img src="/favicon.svg" alt="" width="32" height="32">
+    <span>Văn bằng số</span>
+  </a>
+  <span class="portal-context">Tuyển dụng</span>
+</header>
 
 <!-- LOGIN SCREEN -->
 <div id="loginView" class="auth-screen">
   <div class="auth-container">
     <div class="auth-form-col">
       <div class="auth-brand">
-        <div class="auth-logo">RP</div>
-        <div>
-          <h1>Cổng Xác minh Tuyển dụng Doanh nghiệp</h1>
-          <p>Xác minh tức thời văn bằng W3C VC 2.0 &amp; đối chiếu sổ gốc có Watermark động</p>
-        </div>
+        <h1>Đăng nhập</h1>
+        <p>Xác minh văn bằng ứng viên.</p>
       </div>
 
       <form id="rpLoginForm">
         <div class="form-group">
-          <label class="form-label" for="inRpUser">Tài khoản Nhân sự (HR Account)</label>
-          <input type="text" id="inRpUser" value="hr.fpt" required>
+          <label class="form-label" for="inRpUser">Tên đăng nhập</label>
+          <input type="text" id="inRpUser" autocomplete="username" value="hr.fpt" required>
         </div>
         <div class="form-group">
-          <label class="form-label" for="inRpPass">Mật khẩu (Băm scrypt · Phiên HttpOnly)</label>
-          <input type="password" id="inRpPass" value="Demo@2026" required>
+          <label class="form-label" for="inRpPass">Mật khẩu</label>
+          <input type="password" id="inRpPass" autocomplete="current-password" required>
         </div>
-        <div id="rpLoginErr" class="alert alert-danger mb-12" style="display:none"></div>
-        <button type="submit" class="btn-accent btn-block">Đăng nhập Cổng Tuyển dụng</button>
+        <div id="rpLoginErr" class="alert alert-danger mb-12" role="alert" style="display:none"></div>
+        <button type="submit" class="btn-accent btn-block">Đăng nhập</button>
       </form>
-
-      <div class="auth-note">
-        <b>Định danh Doanh nghiệp &amp; Watermark:</b> Tên đơn vị tuyển dụng đăng nhập sẽ được gắn vào <code>Verification Receipt Token</code> và đóng dấu mờ động (Dynamic SVG Watermark) khi đối chiếu bản Scan Sổ gốc tại Trường.
-      </div>
     </div>
 
-    <div class="auth-demo-col">
-      <div>
-        <div class="auth-section-label">Chọn Tài khoản Doanh nghiệp Đối tác (1-Click)</div>
-
-        <button type="button" class="demo-acc-card" data-u="hr.fpt">
-          <div class="demo-acc-top">
-            <span class="demo-acc-name">FPT Software — Ngô Thanh Hương (hr.fpt)</span>
-            <span class="badge badge-info">HR_MANAGER</span>
-          </div>
-          <div class="demo-acc-sub">Trưởng ban Tuyển dụng FPT Software — Toàn quyền tạo yêu cầu QR, xem bản Scan Sổ gốc Watermark, quản lý mẫu truy vấn DCQL &amp; cấu hình Cache.</div>
-        </button>
-
-        <button type="button" class="demo-acc-card" data-u="hr.viettel">
-          <div class="demo-acc-top">
-            <span class="demo-acc-name">Viettel Cyber Security — Đặng Thu Hà (hr.viettel)</span>
-            <span class="badge badge-success">HR_MANAGER</span>
-          </div>
-          <div class="demo-acc-sub">Trưởng phòng Nhân sự VCS — Đóng dấu mờ động <code>Viettel Cyber Security</code> khi thẩm định văn bằng số hóa từ sổ gốc.</div>
-        </button>
-
-        <button type="button" class="demo-acc-card" data-u="hr.vng">
-          <div class="demo-acc-top">
-            <span class="demo-acc-name">VNG Corporation — Lý Hoàng Sơn (hr.vng)</span>
-            <span class="badge badge-purple">HR_MANAGER</span>
-          </div>
-          <div class="demo-acc-sub">Talent Acquisition Manager tại VNG Corporation (talent@vng.com.vn).</div>
-        </button>
-
-        <button type="button" class="demo-acc-card" data-u="staff.fpt">
-          <div class="demo-acc-top">
-            <span class="demo-acc-name">FPT Software — Bùi Văn Nam (staff.fpt)</span>
-            <span class="badge badge-warn">HR_STAFF</span>
-          </div>
-          <div class="demo-acc-sub">Chuyên viên Tuyển dụng — Được tạo phiên QR xác minh ứng viên nhưng không có quyền xóa mẫu truy vấn hoặc đổi cấu hình hệ thống.</div>
-        </button>
-      </div>
-    </div>
+    <aside class="auth-demo-col" aria-label="Tài khoản mẫu">
+      <h2 class="auth-section-label">Tài khoản mẫu</h2>
+      <p class="auth-demo-hint">Chọn tài khoản rồi nhập mật khẩu demo.</p>
+      <button type="button" class="demo-acc-card" data-u="hr.fpt">
+        <span class="demo-acc-top">
+          <span class="demo-acc-name">FPT Software</span>
+          <span class="badge badge-info">Quản lý</span>
+        </span>
+        <span class="demo-acc-sub">hr.fpt</span>
+      </button>
+      <button type="button" class="demo-acc-card" data-u="hr.viettel">
+        <span class="demo-acc-top">
+          <span class="demo-acc-name">Viettel Cyber Security</span>
+          <span class="badge badge-info">Quản lý</span>
+        </span>
+        <span class="demo-acc-sub">hr.viettel</span>
+      </button>
+      <button type="button" class="demo-acc-card" data-u="hr.vng">
+        <span class="demo-acc-top">
+          <span class="demo-acc-name">VNG Corporation</span>
+          <span class="badge badge-info">Quản lý</span>
+        </span>
+        <span class="demo-acc-sub">hr.vng</span>
+      </button>
+      <button type="button" class="demo-acc-card" data-u="staff.fpt">
+        <span class="demo-acc-top">
+          <span class="demo-acc-name">FPT Software</span>
+          <span class="badge badge-warn">Chuyên viên</span>
+        </span>
+        <span class="demo-acc-sub">staff.fpt</span>
+      </button>
+    </aside>
   </div>
 </div>
 
@@ -105,22 +87,21 @@
         </div>
       </div>
 
-      <div class="nav-section-label">Nghiệp vụ Tuyển dụng</div>
-      <div class="nav-list" id="navList">
-        <button class="nav-btn active" data-tab="verify">
-          <span>Xác minh Ứng viên (QR)</span>
+      <nav class="nav-list" id="navList" aria-label="Mục làm việc">
+        <button class="nav-btn active" aria-current="page" data-tab="verify">
+          <span>Xác minh</span>
         </button>
         <button class="nav-btn" data-tab="dashboard">
-          <span>Tổng quan &amp; Thống kê</span>
+          <span>Tổng quan</span>
         </button>
         <button class="nav-btn" data-tab="history">
-          <span>Lịch sử Hồ sơ Ứng viên</span>
+          <span>Lịch sử</span>
           <span class="nav-badge" id="navHistBadge">0</span>
         </button>
         <button class="nav-btn" data-tab="settings">
-          <span>Mẫu Truy vấn &amp; Cache</span>
+          <span>Cài đặt</span>
         </button>
-      </div>
+      </nav>
     </div>
 
     <div class="sidebar-user">
@@ -128,27 +109,27 @@
         <div class="sidebar-user-name" id="rpUserName">–</div>
         <div class="sidebar-user-role" id="rpUserRole">–</div>
         <div class="mt-8">
-          <label class="field-label" for="quickSwitchRp">Chuyển nhanh Doanh nghiệp</label>
+          <label class="field-label" for="quickSwitchRp">Đổi tài khoản mẫu</label>
           <select id="quickSwitchRp">
-            <option value="hr.fpt">FPT Software (HR_MANAGER)</option>
+            <option value="hr.fpt">Quản lý FPT</option>
             <option value="hr.viettel">Viettel Cyber Security</option>
             <option value="hr.vng">VNG Corporation</option>
-            <option value="staff.fpt">Chuyên viên FPT (HR_STAFF)</option>
+            <option value="staff.fpt">Chuyên viên FPT</option>
           </select>
         </div>
       </div>
-      <button id="btnRpLogout" class="btn-secondary btn-block">Đăng xuất phiên</button>
+      <button id="btnRpLogout" class="btn-secondary btn-block">Đăng xuất</button>
     </div>
   </aside>
 
   <div class="main-area">
     <header class="page-header">
       <div>
-        <h1>Cổng Thẩm định &amp; Xác minh Văn bằng Ứng viên</h1>
-        <p>Giao thức OpenID4VP 1.0 + Truy vấn DCQL + Xác minh mật mã 4 bước (ECDSA-SD-2023 &amp; Holder Binding)</p>
+        <h1 id="verifierPageTitle">Xác minh văn bằng</h1>
+        <p id="verifierPageSub">Chọn thông tin cần xác minh và gửi yêu cầu cho ứng viên.</p>
       </div>
       <div class="row">
-        <span class="badge badge-info" id="topOrgBadge">–</span>
+        <span class="badge badge-neutral" id="topOrgBadge">–</span>
       </div>
     </header>
 
@@ -160,43 +141,42 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">1. Thiết lập Truy vấn DCQL &amp; Sinh Mã QR</h3>
-                <p class="card-sub">Chọn từ Mẫu tuyển dụng của doanh nghiệp hoặc tùy chỉnh các thuộc tính yêu cầu ứng viên tiết lộ</p>
+                <h3 class="card-title">Yêu cầu xác minh</h3>
               </div>
             </div>
             <div class="card-body">
               <div class="form-group">
-                <label class="form-label">Chọn Mẫu Yêu cầu Tuyển dụng (Query Template)</label>
-                <select id="tplSelect"></select>
+                <label class="form-label" for="tplSelect">Mẫu yêu cầu</label>
+                <select id="tplSelect"><option value="">Tùy chỉnh</option></select>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Loại văn bằng yêu cầu</label>
+                <label class="form-label" for="vCredType">Loại văn bằng</label>
                 <select id="vCredType">
-                  <option value="DegreeCredential">Bằng tốt nghiệp Đại học (DegreeCredential)</option>
-                  <option value="CourseCertificateCredential">Chứng chỉ Khóa học (CourseCertificateCredential)</option>
+                  <option value="DegreeCredential">Bằng tốt nghiệp</option>
+                  <option value="CourseCertificateCredential">Chứng chỉ khóa học</option>
                 </select>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Các thuộc tính yêu cầu tiết lộ trong <code>dcql_query</code></label>
-                <div id="vClaimChips"></div>
+                <span class="form-label" id="claimsLabel">Thông tin cần xác minh</span>
+                <div id="vClaimChips" role="group" aria-labelledby="claimsLabel"></div>
               </div>
 
               <button id="btnGenerateQr" class="btn-accent btn-block">
-                Tạo Yêu cầu OpenID4VP &amp; Sinh Mã QR
+                Tạo mã QR
               </button>
 
               <div id="qrDisplayBox" class="qr-display" style="display:none">
                 <div class="qr-wrapper">
-                  <img id="vQrImg" src="" alt="QR OpenID4VP">
+                  <img id="vQrImg" alt="Mã QR yêu cầu xác minh" width="148" height="148">
                   <div class="qr-meta">
-                    <div class="mb-8"><b>Quét mã QR từ Ví Điện thoại Ứng viên</b></div>
-                    <div class="muted mb-8">Mở <b>/wallet.html</b> trên điện thoại để quét, hoặc bấm nút mô phỏng nhanh bên dưới nếu đang demo trên 1 máy tính:</div>
-                    <button id="btnSimulateWalletPresent" class="btn-secondary btn-sm btn-block mb-8">
-                      Trình bày nhanh từ Ví Sinh viên (Demo 1-Click)
-                    </button>
-                    <div class="mono muted break-all" id="vReqUriText"></div>
+                    <strong>Chia sẻ yêu cầu</strong>
+                    <p class="muted mb-8">Ứng viên quét mã hoặc dán liên kết vào ví.</p>
+                    <div class="qr-link">
+                      <input type="text" id="vReqUriText" aria-label="Liên kết yêu cầu" readonly>
+                      <button type="button" id="btnCopyRequest" class="btn-secondary">Sao chép</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -205,39 +185,41 @@
 
           <div class="card">
             <div class="card-header">
-              <div>
-                <h3 class="card-title">2. Kết quả Xác minh 4 Bước Thời gian thực (SSE)</h3>
-                <p class="card-sub">Kiểm tra tuần tự chống phát lại Redis, chữ ký Holder Binding, chữ ký Trường &amp; Bitstring Status List</p>
-              </div>
+              <h3 class="card-title">Kết quả xác minh</h3>
+              <span class="badge badge-neutral" id="verifyProgress">Chưa có yêu cầu</span>
             </div>
             <div class="card-body">
               <div class="step-row">
-                <div><span class="step-dot" id="st1"></span><b>Bước 1:</b> Chống tấn công phát lại (Redis <code>SET NX EX</code>)</div>
+                <div><span class="step-dot" id="st1"></span>Phiên xác minh</div>
                 <span class="mono muted" id="stLat1">–</span>
               </div>
               <div class="step-row">
-                <div><span class="step-dot" id="st2"></span><b>Bước 2:</b> Chữ ký Holder Binding (VP PoP · <code>ecdsa-rdfc-2019</code>)</div>
+                <div><span class="step-dot" id="st2"></span>Chữ ký người giữ</div>
                 <span class="mono muted" id="stLat2">–</span>
               </div>
               <div class="step-row">
-                <div><span class="step-dot" id="st3"></span><b>Bước 3:</b> Chữ ký Trường (<code>ecdsa-sd-2023</code>) &amp; Chữ ký Sổ gốc</div>
+                <div><span class="step-dot" id="st3"></span>Chữ ký nhà trường</div>
                 <span class="mono muted" id="stLat3">–</span>
               </div>
               <div class="step-row">
-                <div><span class="step-dot" id="st4"></span><b>Bước 4:</b> Kiểm tra thu hồi W3C Bitstring Status List</div>
+                <div><span class="step-dot" id="st4"></span>Hiệu lực văn bằng</div>
                 <span class="mono muted" id="stLat4">–</span>
               </div>
 
-              <div id="vBanner" class="banner-msg" style="display:none"></div>
+              <div id="vBanner" class="banner-msg" role="status" style="display:none"></div>
 
-              <div class="mt-12">
-                <div class="row-between">
-                  <span class="form-label mb-0">Dữ liệu Ứng viên đã tiết lộ (Các trường khác đã ẩn mật mã)</span>
-                  <button id="btnViewWatermark" class="btn-secondary btn-sm" disabled>Đối chiếu Sổ gốc (Watermark)</button>
+              <section id="vShared" class="result-details" hidden>
+                <div class="result-heading">
+                  <h4>Thông tin được chia sẻ</h4>
+                  <button id="btnViewWatermark" class="btn-secondary btn-sm" disabled>Xem sổ gốc</button>
                 </div>
-                <pre class="code-block" id="vDisclosedPre">Đang chờ ứng viên quét mã QR và gửi gói tin vp_token…</pre>
+                <dl id="vDisclosedList" class="result-fields"></dl>
+                <details id="vRawResult">
+                  <summary>Dữ liệu JSON</summary>
+                  <pre class="code-block" id="vDisclosedPre"></pre>
+                </details>
                 <div id="vWatermarkBox" class="mt-12"></div>
-              </div>
+              </section>
             </div>
           </div>
         </div>
@@ -247,22 +229,22 @@
       <section id="tab-dashboard" class="tab-pane" style="display:none">
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-label"><span>Tổng Lượt Xác minh</span><span class="badge badge-neutral">Sessions</span></div>
+            <div class="kpi-label"><span>Lượt xác minh</span></div>
             <div class="kpi-value" id="rpKpiTotal">0</div>
-            <div class="kpi-sub">Phiên xác minh OpenID4VP</div>
+
           </div>
           <div class="kpi-card">
-            <div class="kpi-label"><span>Hồ sơ Ứng viên Hợp lệ</span><span class="badge badge-success">Verified</span></div>
+            <div class="kpi-label"><span>Hợp lệ</span></div>
             <div class="kpi-value" id="rpKpiOk">0</div>
-            <div class="kpi-sub">Vượt qua đủ 4 bước mật mã</div>
+
           </div>
           <div class="kpi-card">
-            <div class="kpi-label"><span>Tấn công / Giả mạo Bị chặn</span><span class="badge badge-danger">Blocked</span></div>
+            <div class="kpi-label"><span>Bị từ chối</span></div>
             <div class="kpi-value" id="rpKpiBlocked">0</div>
-            <div class="kpi-sub" id="rpKpiBlockedSub">Replay, Tamper, Spoof, Revoked</div>
+
           </div>
           <div class="kpi-card">
-            <div class="kpi-label"><span>Độ trễ Xác minh Trung bình</span><span class="badge badge-info">Latency</span></div>
+            <div class="kpi-label"><span>Độ trễ trung bình</span></div>
             <div class="kpi-value" id="rpKpiLat">0 ms</div>
             <div class="kpi-sub" id="rpKpiCacheSub">–</div>
           </div>
@@ -270,7 +252,7 @@
 
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Các phiên Xác minh Gần đây</h3>
+            <h3 class="card-title">Xác minh gần đây</h3>
           </div>
           <div class="table-wrap">
             <table>
@@ -278,10 +260,10 @@
                 <tr>
                   <th>Thời gian</th>
                   <th>Ứng viên</th>
-                  <th>Đơn vị Xác minh</th>
+                  <th>Đơn vị</th>
                   <th>Loại văn bằng</th>
                   <th>Kết quả</th>
-                  <th>Tổng độ trễ</th>
+                  <th>Độ trễ</th>
                 </tr>
               </thead>
               <tbody id="rpRecentBody"></tbody>
@@ -295,15 +277,14 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h3 class="card-title">Lịch sử Thẩm định Hồ sơ Ứng viên &amp; Phát hiện Tấn công</h3>
-              <p class="card-sub">Lưu trữ bền vững trong PostgreSQL 16 phục vụ hậu kiểm tuyển dụng</p>
+              <h3 class="card-title">Lịch sử xác minh</h3>
             </div>
             <div class="row">
-              <input type="text" id="histSearch" class="w-220" placeholder="Tìm ứng viên, loại lỗi…">
-              <select id="histStatusFilter" class="w-170">
-                <option value="">— Tất cả kết quả —</option>
-                <option value="verified">Hợp lệ (Verified)</option>
-                <option value="blocked">Bị chặn (Blocked)</option>
+              <input type="text" id="histSearch" aria-label="Tìm ứng viên" class="w-220" placeholder="Tìm ứng viên, loại lỗi…">
+              <select id="histStatusFilter" aria-label="Lọc kết quả" class="w-170">
+                <option value="">Mọi kết quả</option>
+                <option value="verified">Hợp lệ</option>
+                <option value="blocked">Bị từ chối</option>
               </select>
             </div>
           </div>
@@ -313,9 +294,9 @@
                 <tr>
                   <th>Thời gian</th>
                   <th>Ứng viên</th>
-                  <th>Đơn vị Tuyển dụng</th>
+                  <th>Đơn vị</th>
                   <th>Loại văn bằng</th>
-                  <th>Kết quả / Loại tấn công</th>
+                  <th>Kết quả</th>
                   <th>Độ trễ (ms)</th>
                   <th>Chi tiết</th>
                 </tr>
@@ -332,8 +313,7 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Danh mục Mẫu Truy vấn Tuyển dụng (DCQL Templates)</h3>
-                <p class="card-sub">Chuẩn hóa các thuộc tính cần thu thập cho từng vị trí tuyển dụng (Chỉ HR_MANAGER được thêm/xóa)</p>
+                <h3 class="card-title">Mẫu yêu cầu</h3>
               </div>
             </div>
             <div class="card-body" id="tplListBox"></div>
@@ -342,19 +322,19 @@
           <div class="card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Cấu hình Bộ nhớ đệm Bitstring Status List</h3>
-                <p class="card-sub">Đánh đổi giữa Tính riêng tư (Zero-Phone-Home TTL) và Độ tươi thu hồi tức thời (ETag 304)</p>
+                <h3 class="card-title">Bộ nhớ đệm trạng thái</h3>
+                <p class="card-sub">Chọn cách cập nhật trạng thái văn bằng.</p>
               </div>
             </div>
             <div class="card-body">
               <div class="form-group">
-                <label class="form-label">Chế độ Cache hiện tại</label>
+                <label class="form-label" for="cfgCacheMode">Chế độ</label>
                 <select id="cfgCacheMode">
-                  <option value="ETAG_REVALIDATE">ETAG_REVALIDATE — Hỏi lại bằng If-None-Match (Nhận HTTP 304, phát hiện thu hồi tức thì)</option>
-                  <option value="TTL_ONLY">TTL_ONLY — Dùng bản lưu RAM trong 300s (Không gọi về Trường, bảo vệ Herd Privacy tuyệt đối)</option>
+                  <option value="ETAG_REVALIDATE">Kiểm tra lại mỗi lần (ETag)</option>
+                  <option value="TTL_ONLY">Dùng bản lưu đến hết hạn (TTL)</option>
                 </select>
               </div>
-              <button id="btnSaveCacheCfg" class="btn-accent btn-block">Cập nhật Cấu hình Cache &amp; Xóa đệm cũ</button>
+              <button id="btnSaveCacheCfg" class="btn-accent btn-block">Lưu cài đặt</button>
               <div id="cacheCountersBox" class="cache-counters"></div>
             </div>
           </div>
@@ -369,7 +349,7 @@
 <div class="modal-backdrop" id="modalVerDetail">
   <div class="modal">
     <div class="modal-header">
-      <h3>Chi tiết Phiên Xác minh Ứng viên</h3>
+      <h3>Chi tiết xác minh</h3>
       <button class="btn-secondary btn-sm" onclick="$('modalVerDetail').classList.remove('open')">Đóng</button>
     </div>
     <div class="modal-body" id="verDetailBody"></div>
@@ -379,7 +359,7 @@
   </div>
 </div>
 
-<div class="toast-box" id="toastBox"></div>
+<div class="toast-box" id="toastBox" role="status"></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -422,7 +402,7 @@ const OPTIONAL_CLAIMS = {
   ]
 };
 
-let rpUser = null, templates = [], es = null, currentReq = null;
+let rpUser = null, templates = [], es = null;
 
 async function checkSession() {
   const r = await api('/api/rp/auth/me');
@@ -436,8 +416,8 @@ async function checkSession() {
   $('orgTitle').textContent = rpUser.orgName;
   $('orgSub').textContent = `${rpUser.orgDomain} · OID4VP`;
   $('rpUserName').textContent = rpUser.fullName;
-  $('rpUserRole').textContent = `${rpUser.email} (${rpUser.role})`;
-  $('topOrgBadge').textContent = `${rpUser.orgName} · ${rpUser.fullName} (${rpUser.role})`;
+  $('rpUserRole').textContent = rpUser.role === 'HR_MANAGER' ? 'Quản lý' : 'Chuyên viên';
+  $('topOrgBadge').textContent = rpUser.orgName;
   $('quickSwitchRp').value = rpUser.username;
   $('cfgCacheMode').value = r.data.cacheMode || 'ETAG_REVALIDATE';
 
@@ -460,37 +440,46 @@ $('rpLoginForm').onsubmit = async e => {
     $('rpLoginErr').style.display = 'block';
     return;
   }
-  toast(`Đã đăng nhập: ${r.data.user.orgName} — ${r.data.user.fullName}`, 'ok');
+  toast('Đã đăng nhập.', 'ok');
   await checkSession();
 };
 
 document.querySelectorAll('.demo-acc-card').forEach(btn => {
   btn.onclick = () => {
     $('inRpUser').value = btn.dataset.u;
-    $('inRpPass').value = 'Demo@2026';
-    $('rpLoginForm').requestSubmit();
+    $('inRpPass').focus();
   };
 });
 
 $('quickSwitchRp').onchange = async () => {
   const r = await api('/api/rp/auth/login', {
     method: 'POST',
-    body: {username: $('quickSwitchRp').value, password: 'Demo@2026'}
+    body: {username: $('quickSwitchRp').value, password: prompt('Nhập mật khẩu tài khoản') || ''}
   });
   if (r.ok) {
-    toast(`Đã chuyển sang đơn vị: ${r.data.user.orgName} (${r.data.user.fullName})`, 'ok');
+    clearVerification();
+    toast('Đã đổi tài khoản.', 'ok');
     await checkSession();
   }
 };
 
 $('btnRpLogout').onclick = async () => {
   await api('/api/rp/auth/logout', {method: 'POST'});
+  clearVerification();
   checkSession();
 };
 
 function switchTab(tab) {
-  document.querySelectorAll('#navList .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('#navList .nav-btn').forEach(b => {
+    const selected = b.dataset.tab === tab;
+    b.classList.toggle('active', selected);
+    if (selected) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.tab-pane').forEach(p => p.style.display = p.id === `tab-${tab}` ? 'block' : 'none');
+  const titles = {verify: 'Xác minh văn bằng', dashboard: 'Tổng quan', history: 'Lịch sử', settings: 'Cài đặt'};
+  $('verifierPageTitle').textContent = titles[tab];
+  $('verifierPageSub').hidden = tab !== 'verify';
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'history') loadHistory();
   if (tab === 'settings') loadDashboard();
@@ -519,19 +508,33 @@ $('tplSelect').onchange = () => {
   renderClaimChips(tpl.claims || []);
 };
 
+function clearVerification() {
+  es?.close();
+  $('qrDisplayBox').style.display = 'none';
+  $('vReqUriText').value = '';
+  $('modalVerDetail').classList.remove('open');
+  $('verDetailBody').textContent = '';
+  resetStepper();
+}
+
 function resetStepper() {
   [1, 2, 3, 4].forEach(i => {
     $('st' + i).className = 'step-dot';
     $('stLat' + i).textContent = '–';
   });
   $('vBanner').style.display = 'none';
-  $('vDisclosedPre').textContent = 'Đang chờ ứng viên quét mã QR và gửi gói tin vp_token…';
+  $('verifyProgress').textContent = 'Chưa có yêu cầu';
+  $('verifyProgress').className = 'badge badge-neutral';
+  $('vShared').hidden = true;
+  $('vRawResult').open = false;
+  $('vDisclosedPre').textContent = '';
+  $('vDisclosedList').textContent = '';
   $('btnViewWatermark').disabled = true;
   $('vWatermarkBox').innerHTML = '';
 }
 
 $('btnGenerateQr').onclick = async () => {
-  resetStepper();
+  clearVerification();
   const claims = [...document.querySelectorAll('.v-claim-cb:checked')].map(i => i.value);
   const r = await api('/api/verifier/request', {
     method: 'POST',
@@ -542,32 +545,34 @@ $('btnGenerateQr').onclick = async () => {
       publicOrigin: location.origin
     }
   });
-  if (!r.ok) { toast('Không tạo được yêu cầu OpenID4VP', 'err'); return; }
-  currentReq = r.data;
+  if (!r.ok) { toast(r.data?.error || 'Không tạo được yêu cầu.', 'err'); return; }
   $('qrDisplayBox').style.display = 'block';
   $('vQrImg').src = r.data.qrDataUrl;
-  $('vReqUriText').textContent = r.data.request_uri;
+  $('vReqUriText').value = r.data.request_uri;
+  $('verifyProgress').textContent = 'Đang chờ ứng viên';
+  $('verifyProgress').className = 'badge badge-info';
 
-  if (es) es.close();
   es = new EventSource('/api/verifier/events?state=' + encodeURIComponent(r.data.request.state));
   es.addEventListener('VERIFICATION_COMPLETED', e => {
     const d = JSON.parse(e.data);
     const t = d.latency || {};
     [1, 2, 3, 4].forEach(i => $('st' + i).className = 'step-dot ok');
     $('stLat1').textContent = `${(t.redisMs || 0).toFixed(2)} ms`;
-    $('stLat2').textContent = 'PoP OK';
+    $('stLat2').textContent = 'Hợp lệ';
     $('stLat3').textContent = `${(t.cryptoMs || 0).toFixed(2)} ms`;
     $('stLat4').textContent = `${(t.statusMs || 0).toFixed(2)} ms`;
     const b = $('vBanner');
     b.style.display = 'block';
     b.className = 'banner-msg banner-ok';
-    b.textContent = `Xác minh thành công 4/4 bước cho ứng viên ${d.disclosedClaims?.studentName || ''} (Tổng: ${((t.redisMs || 0) + (t.cryptoMs || 0) + (t.statusMs || 0)).toFixed(2)} ms)`;
-    $('vDisclosedPre').textContent = JSON.stringify(d.disclosedClaims, null, 2);
+    b.textContent = 'Văn bằng hợp lệ.';
+    $('verifyProgress').textContent = 'Đã xác minh';
+    $('verifyProgress').className = 'badge badge-success';
+    renderDisclosed(d.disclosedClaims || {});
     if (d.legacyDocument) {
       $('btnViewWatermark').disabled = false;
       $('btnViewWatermark').dataset.url = new URL(d.legacyDocument).pathname;
     }
-    toast('Đã xác minh thành công hồ sơ ứng viên!', 'ok');
+    toast('Xác minh thành công.', 'ok');
     loadDashboard();
   });
   es.addEventListener('ATTACK_DETECTED', e => {
@@ -578,70 +583,40 @@ $('btnGenerateQr').onclick = async () => {
     const b = $('vBanner');
     b.style.display = 'block';
     b.className = 'banner-msg banner-bad';
-    b.textContent = `Chặn đứng ở bước ${f} [${d.attackType} · HTTP ${d.httpStatus}]: ${d.message}`;
-    toast(`Đã chặn cuộc tấn công: ${d.attackType}`, 'err');
+    b.textContent = d.message || 'Văn bằng không hợp lệ.';
+    $('verifyProgress').textContent = 'Bị từ chối';
+    $('verifyProgress').className = 'badge badge-danger';
+    $('vShared').hidden = true;
     loadDashboard();
   });
 };
 
-// Co-located 1-click simulation using the Wallet service
-const WALLET_API = (location.port === '4002' || location.port === '4001')
-  ? `${location.protocol}//${location.hostname}:3000`
-  : '';
-
-$('btnSimulateWalletPresent').onclick = async () => {
-  if (!currentReq) return;
+$('btnCopyRequest').onclick = async () => {
+  const field = $('vReqUriText');
   try {
-    let wInfo = await (await fetch(WALLET_API + '/api/wallet/info')).json();
-    const wantCourse = $('vCredType').value === 'CourseCertificateCredential';
-    const wantLegacy = $('tplSelect').value === 'tpl-legacy';
-    let match = (wInfo.credentials || []).find(c =>
-      wantCourse ? c.type.includes('CourseCertificateCredential') : (wantLegacy ? c.hasLegacy : !c.type.includes('CourseCertificateCredential'))
-    );
-    if (!match) {
-      if (wantCourse) {
-        const iss = await (await fetch(WALLET_API + '/api/issuer/issue-course', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
-        })).json();
-        await fetch(WALLET_API + '/api/wallet/receive', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: iss.recordId, credential: iss.credential})
-        });
-        match = {id: iss.recordId};
-      } else if (wantLegacy) {
-        const ing = await (await fetch(WALLET_API + '/api/issuer/legacy/ingest', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
-        })).json();
-        const app = await (await fetch(WALLET_API + '/api/issuer/legacy/approve', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({recordId: ing.recordId})
-        })).json();
-        await fetch(WALLET_API + '/api/wallet/receive', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: app.recordId, credential: app.credential})
-        });
-        match = {id: app.recordId};
-      } else {
-        const iss = await (await fetch(WALLET_API + '/api/issuer/issue-degree', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({holderDid: wInfo.did})
-        })).json();
-        await fetch(WALLET_API + '/api/wallet/receive', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: iss.recordId, credential: iss.credential})
-        });
-        match = {id: iss.recordId};
-      }
-    }
-    await fetch(WALLET_API + '/api/wallet/present', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        request: currentReq.request,
-        credentialId: match.id,
-        consent: true,
-        submit: true
-      })
-    });
-  } catch (e) {
-    toast('Không kết nối được tới dịch vụ Ví (:3000): ' + e.message, 'err');
+    await navigator.clipboard.writeText(field.value);
+    toast('Đã sao chép liên kết.', 'ok');
+  } catch {
+    field.focus();
+    field.select();
+    toast('Chọn Sao chép trên thiết bị.');
   }
 };
+
+function renderDisclosed(claims) {
+  const labelEntries = [
+    ['studentName', 'Họ và tên'], ['graduated', 'Tốt nghiệp'],
+    ['courseName', 'Học phần'], ['certificateValid', 'Chứng chỉ hợp lệ'],
+    ...Object.values(OPTIONAL_CLAIMS).flat()
+  ];
+  const labels = new Map(labelEntries);
+  const fields = Object.entries(claims).filter(([key]) => labels.has(key));
+  const format = value => Array.isArray(value) ? value.join(', ') : value === true ? 'Có' : value === false ? 'Không' : value;
+  $('vDisclosedList').innerHTML = fields.map(([key, value]) =>
+    `<div><dt>${esc(labels.get(key))}</dt><dd>${esc(format(value))}</dd></div>`).join('');
+  $('vDisclosedPre').textContent = JSON.stringify(claims, null, 2);
+  $('vShared').hidden = false;
+}
 
 $('btnViewWatermark').onclick = async () => {
   const url = $('btnViewWatermark').dataset.url;
@@ -658,7 +633,7 @@ async function loadDashboard() {
   const d = r.data;
   templates = d.templates || [];
   const curTpl = $('tplSelect').value;
-  $('tplSelect').innerHTML = templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  $('tplSelect').innerHTML = '<option value="">Tùy chỉnh</option>' + templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
   if (curTpl && templates.some(t => t.id === curTpl)) $('tplSelect').value = curTpl;
 
   $('navHistBadge').textContent = d.stats.total;
@@ -694,11 +669,11 @@ async function loadDashboard() {
   `).join('');
 
   $('cacheCountersBox').innerHTML = `
-    <div><b>Bộ đếm VerifierStatusCache:</b></div>
-    <div class="mt-8">Chế độ đang bật: <code class="mono">${esc(d.cache.mode)}</code></div>
-    <div>• Số lần tái xác thực HTTP 304 (ETag khớp, không tải lại thân16KB): <b>${d.cache.revalidate304}</b></div>
-    <div>• Số lần đọc trực tiếp từ bộ nhớ đệm RAM (Zero-Phone-Home Hit): <b>${d.cache.cacheHits}</b></div>
-    <div>• Số lần tải mới toàn bộ danh sách (HTTP 200): <b>${d.cache.fullFetch200}</b></div>
+    <div><b>Hoạt động bộ nhớ đệm</b></div>
+    <div class="mt-8">Chế độ: <code class="mono">${esc(d.cache.mode)}</code></div>
+    <div>Kiểm tra ETag (304): <b>${d.cache.revalidate304}</b></div>
+    <div>Dùng bản lưu: <b>${d.cache.cacheHits}</b></div>
+    <div>Tải bản mới (200): <b>${d.cache.fullFetch200}</b></div>
   `;
 }
 
@@ -718,9 +693,12 @@ async function loadHistory() {
         <td><b>${esc(v.studentName || 'Không rõ (Bị chặn)')}</b></td>
         <td>${esc(v.verifierName)}</td>
         <td><span class="badge badge-neutral">${esc(v.credentialType)}</span></td>
-        <td>${v.verified ? '<span class="badge badge-success">Đạt 4/4 bước</span>' : `<span class="badge badge-danger">${esc(v.attackType)}: ${esc(v.reason || '')}</span>`}</td>
+        <td>${v.verified ? '<span class="badge badge-success">Hợp lệ</span>' : `<span class="badge badge-danger">${esc(v.attackType)}: ${esc(v.reason || '')}</span>`}</td>
         <td class="mono">${totalMs} ms</td>
-        <td><button class="btn-sm btn-secondary" onclick="showVerDetail('${esc(v.state)}')">Xem</button></td>
+        <td class="row">
+          <button class="btn-sm btn-secondary" onclick="showVerDetail('${esc(v.state)}')">Xem</button>
+          ${v.verified ? `<button class="btn-sm btn-accent" onclick="exportVerReceipt('${esc(v.state)}')">Biên bản</button>` : ''}
+        </td>
       </tr>
     `;
   }).join('') || '<tr class="empty-row"><td colspan="7">Chưa có bản ghi nào.</td></tr>';
@@ -739,11 +717,30 @@ window.showVerDetail = async function(state) {
     </div>
     <div class="mb-12">
       <b>Kết quả:</b> ${v.verified ? '<span class="badge badge-success">Hợp lệ</span>' : `<span class="badge badge-danger">Bị chặn (${esc(v.attackType)}) — ${esc(v.reason)}</span>`}
+      ${v.verified ? `<button class="btn-sm btn-accent" style="margin-left:10px" onclick="exportVerReceipt('${esc(v.state)}')">Xuất biên bản</button>` : ''}
     </div>
-    <div class="section-label">Dữ liệu Thuộc tính Tiết lộ (disclosedClaims)</div>
-    <pre class="code-block">${esc(JSON.stringify(v.disclosedClaims || {}, null, 2))}</pre>
+    <div class="section-label">Thông tin được chia sẻ</div>
+    <pre class="code-block" id="verDetailJson">${esc(JSON.stringify(v.disclosedClaims || {}, null, 2))}</pre>
   `;
   $('modalVerDetail').classList.add('open');
+};
+
+window.exportVerReceipt = async function(state) {
+  const r = await api(`/api/rp/verifications/${encodeURIComponent(state)}/receipt`);
+  if (!r.ok) { toast(r.data?.error || 'Không xuất được biên bản xác minh', 'err'); return; }
+  const rec = r.data.receipt;
+  $('verDetailBody').innerHTML = `
+    <div class="notice notice-ok mb-12">
+      <div class="notice-title">Biên bản xác minh (${esc(rec.receiptId)})</div>
+      <div>Đơn vị cấp biên bản: <b>${esc(rec.organization.orgName)} (${esc(rec.organization.orgDomain)})</b></div>
+      <div>Ứng viên: <b>${esc(rec.candidate.studentName)}</b> · Mã băm bằng chứng: <code class="mono">${esc(rec.evidenceHash.slice(0, 36))}…</code></div>
+      <div class="mono text-success mt-8">Chữ ký HMAC-SHA256: ${esc(rec.signature)}</div>
+    </div>
+    <div class="section-label">Biên bản JSON</div>
+    <pre class="code-block">${esc(JSON.stringify(rec, null, 2))}</pre>
+  `;
+  $('modalVerDetail').classList.add('open');
+  toast('Đã tạo biên bản.', 'ok');
 };
 
 $('btnSaveCacheCfg').onclick = async () => {
@@ -752,7 +749,7 @@ $('btnSaveCacheCfg').onclick = async () => {
     body: {mode: $('cfgCacheMode').value, ttlSeconds: 300, invalidate: true}
   });
   if (r.ok) {
-    toast(`Đã chuyển chế độ Cache sang ${r.data.mode} và xóa đệm cũ!`, 'ok');
+    toast('Đã lưu cài đặt.', 'ok');
     loadDashboard();
   }
 };

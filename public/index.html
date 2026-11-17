@@ -28,7 +28,7 @@
     <div class="brand-mark">UET</div>
     <div class="brand-text">
       <h1>Hệ thống Chứng chỉ Học tập Số — W3C VC 2.0 &amp; ECDSA-SD-2023</h1>
-      <p>Kiến trúc 3 miền độc lập: Issuer (:4001) · Non-Custodial Wallet (:3000) · Verifier (:4002) · Redis 7.4 &amp; PostgreSQL 16</p>
+      <p>Kiến trúc 3 miền độc lập: Issuer (:4001) · Ví mô phỏng (:3000) · Verifier (:4002) · Redis 7.4 &amp; PostgreSQL 16</p>
     </div>
   </div>
   <div class="topbar-actions">
@@ -444,7 +444,7 @@ function log(msg, cls) {
 async function refreshWallet() {
   const info = await (await apiFetch('/api/wallet/info')).json();
   did = info.did;
-  $('badge').innerHTML = `<span class="status-dot"></span><span>Non-Custodial P-256 Active · ${esc(did.slice(0, 22))}…</span>`;
+  $('badge').innerHTML = `<span class="status-dot"></span><span>Ví mẫu P-256 · ${esc(did.slice(0, 22))}…</span>`;
   const sel = $('credSel'), cur = sel.value;
   sel.innerHTML = info.credentials.map(c => {
     const tName = c.type.includes('CourseCertificateCredential')
@@ -568,9 +568,7 @@ $('btnSl').onclick = refreshSl;
 
 // ---- Wallet Backup & Device Change Simulation ----
 $('btnBackupWallet').onclick = async () => {
-  walletBackupBundle = await (await apiFetch('/api/wallet/backup')).json();
-  $('btnRestoreWallet').disabled = false;
-  $('walletDeviceMsg').innerHTML = `<span class="text-success fw-500">Đã sao lưu Ví thành công (${walletBackupBundle.credentials.length} văn bằng + Khóa P-256).</span> Bạn có thể thử bấm "Đổi ĐT mới" rồi "Khôi phục Ví".`;
+  $('walletDeviceMsg').textContent = 'Sao lưu được thực hiện trong Ví sinh viên sau khi đăng nhập.';
 };
 
 $('btnRotateDevice').onclick = async () => {
@@ -586,9 +584,7 @@ $('btnRotateDevice').onclick = async () => {
 
 $('btnRestoreWallet').onclick = async () => {
   if (!walletBackupBundle) return;
-  const r = (await J('/api/wallet/restore', walletBackupBundle)).body;
-  await refreshWallet();
-  $('walletDeviceMsg').innerHTML = `<span class="text-success fw-500">Đã khôi phục nguyên vẹn khóa DID (${esc(r.did.slice(0, 20))}…) và ${r.count} văn bằng lên điện thoại mới.</span>`;
+  $('walletDeviceMsg').textContent = 'Khôi phục được thực hiện trong Ví sinh viên sau khi đăng nhập.';
 };
 
 // ---- Verifier Flow ----

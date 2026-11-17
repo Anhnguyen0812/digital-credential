@@ -12,12 +12,14 @@ import {buildUnsignedCourseVc, COURSE_MANDATORY_POINTERS} from '../profiles/cour
 import {IssuerStatusRegistry} from '../status/status-store.js';
 import {AuditStore, createAuditStore, newRecordId} from '../infra/postgres-store.js';
 import {createOrGetSampleScanFile} from '../legacy-service.js';
-import {readBody, send, preflight, serveStatic} from './http-util.js';
+import {readBody, RequestBodyError, send, preflight, serveStatic} from './http-util.js';
 import {verifyReceipt} from './receipt-token.js';
 import * as fs from 'node:fs';
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
 import {createDocStore, DocStore} from '../infra/doc-store.js';
 import {createIssuerPortal} from '../portal/issuer-portal.js';
+import {sealMultikey, unsealMultikey, SealedIssuerKeyBundle} from '../crypto/key-vault.js';
+import {OidcIdentityProvider} from '../auth/oidc-provider.js';
 
 export interface IssuerOptions {
   port?: number;
@@ -26,6 +28,8 @@ export interface IssuerOptions {
   store?: AuditStore;
   docs?: DocStore;
   scanFilePath?: string;
+  demoMode?: boolean;
+  postgresUrl?: string;
 }
 
 export function didWebFromUrl(publicUrl: string): string {
@@ -50,20 +54,32 @@ ${lines}
 
 export async function createIssuerApp(opts: IssuerOptions = {}) {
   const port = opts.port ?? 4001;
-  const publicUrl = opts.publicUrl ?? `http://localhost:${port}`;
+  const publicUrl = opts.publicUrl?.replace(/\/+$/, '') ?? `http://localhost:${port}`;
   const issuerDid = didWebFromUrl(publicUrl);
   const statusUrl = `${publicUrl}/status/degree-list-1`;
   const cacheSeconds = opts.statusCacheSeconds ?? 300;
 
-  const docs = opts.docs ?? await createDocStore({postgresUrl: process.env.POSTGRES_URL, table: 'issuer_documents'});
+  const postgresUrl = opts.postgresUrl ?? process.env.POSTGRES_URL;
+  const docs = opts.docs ?? await createDocStore({postgresUrl, table: 'issuer_documents'});
+  const demoMode = opts.demoMode === true && docs.mode === 'memory';
+  async function allocateStatusIndex(): Promise<number> {
+    return docs.atomic(async () => {
+      const saved = await docs.get<{next: number}>('status', 'allocator');
+      const next = saved?.next ?? (await docs.list('records')).reduce(
+        (max, record) => Math.max(max, (record.statusListIndex ?? 0) + 1), 1);
+      if(next >= statusRegistry.list.length) throw new Error('Danh sách trạng thái đã hết chỗ');
+      await docs.put('status', 'allocator', {next: next + 1});
+      return next;
+    });
+  }
   const registry = createLoaderRegistry();
-  const {issuerKeyPair, approverKeyPair} = await loadOrCreateIssuerKeys(docs, issuerDid);
+  const {issuerKeyPair, approverKeyPair} = await docs.atomic(() => loadOrCreateIssuerKeys(docs, issuerDid));
   await registerKey(registry, issuerKeyPair);
   await registerKey(registry, approverKeyPair);
   const documentLoader = createCustomDocumentLoader(registry);
   const statusRegistry = new IssuerStatusRegistry(statusUrl, issuerKeyPair, documentLoader);
-  await statusRegistry.publishSignedStatusList();
-  const store = opts.store ?? await createAuditStore();
+  const suspensionRegistry = new IssuerStatusRegistry(statusUrl + '-suspension', issuerKeyPair, documentLoader, 'suspension');
+  const store = opts.store ?? await createAuditStore(postgresUrl);
 
   const scanPath = opts.scanFilePath ?? path.resolve(process.cwd(), 'test-vectors', 'sample_ledger_2015.bin');
   createOrGetSampleScanFile(scanPath, 2_400_000);
@@ -82,10 +98,11 @@ export async function createIssuerApp(opts: IssuerOptions = {}) {
     return undefined;
   }
 
-  const portal = await createIssuerPortal({
-    docs, audit: store, statusRegistry, issuerKeyPair, approverKeyPair, documentLoader, issuerDid, statusUrl,
-    sampleScan, registerScan: (dg, b) => scans.set(dg, b)
-  });
+  const oidcProvider = await OidcIdentityProvider.create(publicUrl);
+  const portal = await docs.atomic(() => createIssuerPortal({
+    docs, audit: store, statusRegistry, suspensionRegistry, allocateStatusIndex, issuerKeyPair, approverKeyPair, documentLoader, issuerDid, statusUrl, issuerUrl: publicUrl,
+    sampleScan, registerScan: (dg, b) => scans.set(dg, b), oidcProvider
+  }));
   await portal.restoreStatus();
 
   const server = http.createServer(async (req, res) => {
@@ -99,14 +116,25 @@ export async function createIssuerApp(opts: IssuerOptions = {}) {
         return send(res, 200, registry.didDocuments.get(issuerDid), {'Cache-Control': 'public, max-age=300'});
       }
 
+      // ---- OpenID Connect / VNeID Discovery & JWKS (W9-05) ----
+      if(req.method === 'GET' && url.pathname === '/.well-known/openid-configuration') {
+        return send(res, 200, oidcProvider.getDiscoveryMetadata(), {'Cache-Control': 'public, max-age=300'});
+      }
+      if(req.method === 'GET' && url.pathname === '/.well-known/jwks.json') {
+        return send(res, 200, oidcProvider.getJwks(), {'Cache-Control': 'public, max-age=300'});
+      }
+
       // ---- Bitstring Status List + ETag ----
-      if(req.method === 'GET' && url.pathname === '/status/degree-list-1') {
-        const r = await statusRegistry.handleHttpGet(req.headers['if-none-match'] as string | undefined);
+      if(req.method === 'GET' && ['/status/degree-list-1', '/status/degree-list-1-suspension'].includes(url.pathname)) {
+        if(!demoMode) await portal.restoreStatus();
+        const selected = url.pathname.endsWith('-suspension') ? suspensionRegistry : statusRegistry;
+        const r = await selected.handleHttpGet(req.headers['if-none-match'] as string | undefined);
         const headers = {ETag: r.etag, 'Cache-Control': `public, max-age=${cacheSeconds}`};
         if(r.status === 304) { res.writeHead(304, {...headers, 'Access-Control-Allow-Origin': '*'}); return res.end(); }
         return send(res, 200, r.body, headers);
       }
 
+      if(url.pathname.startsWith('/api/issuer/') && !demoMode) return send(res, 404, {error: 'not found'});
       const issuerRole = String(req.headers['x-issuer-role'] || 'DEAN_APPROVER');
       const requireApprover = () => {
         if(issuerRole === 'STAFF_VERIFIER') {
@@ -210,10 +238,10 @@ export async function createIssuerApp(opts: IssuerOptions = {}) {
       const m = /^\/api\/legacy\/document\/(.+)$/.exec(url.pathname);
       if(req.method === 'GET' && m) {
         const digest = decodeURIComponent(m[1]);
-        const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || url.searchParams.get('receipt') || undefined;
+        const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || undefined;
         const claims = verifyReceipt(bearer);
         if(!claims) return send(res, 401, {error: 'thieu hoac sai Verification Receipt Token'});
-        if(claims.digest && claims.digest !== digest) return send(res, 403, {error: 'token khong cap quyen cho tai lieu nay'});
+        if(claims.digest !== digest) return send(res, 403, {error: 'token khong cap quyen cho tai lieu nay'});
         const scan = await getScan(digest);
         if(!scan) return send(res, 404, {error: 'khong tim thay tai lieu'});
         const actual = 'urn:sha256:' + createHash('sha256').update(scan).digest('hex');
@@ -226,33 +254,42 @@ export async function createIssuerApp(opts: IssuerOptions = {}) {
       if(await portal.router.handle(req, res, url)) return;
 
       const publicDir = path.resolve(process.cwd(), 'public');
+      if(!demoMode && ['/index.html', '/demo'].includes(url.pathname)) return send(res, 404, {error: 'not found'});
       if(req.method === 'GET' && serveStatic(res, publicDir, url.pathname, 'issuer.html')) return;
       return send(res, 404, {error: 'not found'});
     } catch(err: any) {
-      return send(res, 500, {error: err?.message || String(err)});
+      return send(res, err instanceof RequestBodyError ? err.status : err?.status === 503 ? 503 : 500, {error: err instanceof RequestBodyError ? err.message : 'Không xử lý được yêu cầu cấp phát'});
     }
   });
 
-  await new Promise<void>(r => server.listen(port, '0.0.0.0', r));
+  await new Promise<void>(r => server.listen(port, opts.demoMode ? '127.0.0.1' : '0.0.0.0', r));
   return {
-    server, baseUrl: publicUrl, issuerDid, documentLoader, registry, statusRegistry, issuerKeyPair, approverKeyPair, store, docs,
+    server, baseUrl: publicUrl, issuerDid, documentLoader, registry, statusRegistry, issuerKeyPair, approverKeyPair, store, docs, portal, oidcProvider,
     close: async () => { server.closeAllConnections?.(); await new Promise<void>(r => server.close(() => r())); await store.close(); await docs.close(); }
   };
 }
 
-// Khoa ky cua truong duoc luu ben vung (CSDL) de VC da cap van kiem tra duoc sau khi khoi dong lai.
-// Trien khai that: dat khoa trong HSM / KMS, khong luu trong CSDL ung dung.
+// W9-04: Khoa ky cua truong duoc boc ma hoa (Envelope Encryption AES-256-GCM bang MASTER_KMS_KEY)
+// truoc khi luu xuong CSDL. Tuyet doi khong luu secretKeyMultibase dang ro trong bang issuer_documents.
 async function loadOrCreateIssuerKeys(docs: DocStore, issuerDid: string) {
-  if(docs.mode !== 'memory') {
-    const saved = await docs.get('keys', issuerDid);
-    if(saved) return {issuerKeyPair: await EcdsaMultikey.from(saved.issuer), approverKeyPair: await EcdsaMultikey.from(saved.approver)};
+  const saved = await docs.get<any>('keys', issuerDid);
+  if(saved?.vaultVersion === '1.0' && saved.issuer?.type === 'EncryptedMultikeyEnvelope') {
+    return {issuerKeyPair: await unsealMultikey(saved.issuer), approverKeyPair: await unsealMultikey(saved.approver)};
   }
-  const keys = await generateIssuerKeys(issuerDid);
-  if(docs.mode !== 'memory') {
-    await docs.put('keys', issuerDid, {
-      issuer: await keys.issuerKeyPair.export({publicKey: true, secretKey: true, includeContext: true}),
-      approver: await keys.approverKeyPair.export({publicKey: true, secretKey: true, includeContext: true})
-    });
+  if(saved && (!saved.issuer?.secretKeyMultibase || !saved.approver?.secretKeyMultibase)) {
+    throw new Error('Dữ liệu khóa issuer hiện có không hợp lệ');
   }
+  const keys = saved ? {
+    issuerKeyPair: await EcdsaMultikey.from(saved.issuer),
+    approverKeyPair: await EcdsaMultikey.from(saved.approver)
+  } : await generateIssuerKeys(issuerDid);
+  const rawIssuer = await keys.issuerKeyPair.export({publicKey: true, secretKey: true, includeContext: true});
+  const rawApprover = await keys.approverKeyPair.export({publicKey: true, secretKey: true, includeContext: true});
+  if(rawIssuer.controller !== issuerDid || rawApprover.controller !== issuerDid) throw new Error('Khóa không thuộc issuer đã cấu hình');
+  const sealedBundle: SealedIssuerKeyBundle = {
+    vaultVersion: '1.0', issuerDid,
+    issuer: sealMultikey(rawIssuer), approver: sealMultikey(rawApprover)
+  };
+  await docs.put('keys', issuerDid, sealedBundle);
   return keys;
 }

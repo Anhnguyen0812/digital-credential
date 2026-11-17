@@ -246,7 +246,7 @@ export async function createApp(opts: AppOptions = {}) {
     }
   });
 
-  await new Promise<void>(r => server.listen(port, r));
+  await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
   return {
     server, guard, baseUrl, statusCounters,
     close: async () => { guard.close(); await new Promise<void>(r => server.close(() => r())); }

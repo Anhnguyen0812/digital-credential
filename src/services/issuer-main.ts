@@ -1,7 +1,9 @@
+import {serviceOptions} from './runtime-config.js';
 import {createIssuerApp} from './issuer-app.js';
 
 const port = Number(process.env.PORT) || 4001;
 const app = await createIssuerApp({
+  ...serviceOptions('issuer'),
   port,
   publicUrl: process.env.ISSUER_PUBLIC_URL || `http://localhost:${port}`
 });

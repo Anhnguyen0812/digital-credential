@@ -4,7 +4,7 @@ services:
   redis-guard:
     image: redis:7.4-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:${REDIS_BIND_PORT:-6379}:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -16,9 +16,10 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ssi
-      POSTGRES_PASSWORD: ssi_demo_pw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ssi
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:${POSTGRES_BIND_PORT:-5432}:5432"]
+    volumes: [pg-data:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ssi -d ssi"]
       interval: 3s
@@ -28,16 +29,21 @@ services:
 
   issuer-service:
     build: .
-    image: ssi-app:latest
+    image: ${CREDENTIAL_IMAGE:-ssi-app:latest}
     command: ["npm", "run", "start:issuer"]
     environment:
       PORT: "4001"
       ISSUER_PUBLIC_URL: ${ISSUER_PUBLIC_URL:-http://localhost:4001}
-      POSTGRES_URL: postgres://ssi:ssi_demo_pw@postgres-db:5432/ssi
-      RECEIPT_SECRET: ${RECEIPT_SECRET:-dev-receipt-secret-change-me}
-    ports: ["4001:4001"]
+      POSTGRES_URL: postgres://ssi:${POSTGRES_PASSWORD}@postgres-db:5432/ssi
+      RECEIPT_SECRET: ${RECEIPT_SECRET:?Set RECEIPT_SECRET in .env}
+      MASTER_KMS_KEY: ${MASTER_KMS_KEY:?Set MASTER_KMS_KEY in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Set DEMO_PASSWORD in .env}
+      REDIS_HOST: redis-guard
+    ports: ["127.0.0.1:${ISSUER_BIND_PORT:-4001}:4001"]
     depends_on:
       postgres-db: {condition: service_healthy}
+      redis-guard: {condition: service_healthy}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4001/health"]
       interval: 3s
@@ -46,19 +52,20 @@ services:
     networks: [ssi-network]
 
   verifier-service:
-    image: ssi-app:latest
+    image: ${CREDENTIAL_IMAGE:-ssi-app:latest}
     command: ["npm", "run", "start:verifier"]
     environment:
       PORT: "4002"
       VERIFIER_PUBLIC_URL: ${VERIFIER_PUBLIC_URL:-http://localhost:4002}
       ISSUER_PUBLIC_URL: ${ISSUER_PUBLIC_URL:-http://localhost:4001}
       ISSUER_INTERNAL_URL: http://issuer-service:4001
-      POSTGRES_URL: postgres://ssi:ssi_demo_pw@postgres-db:5432/ssi
+      POSTGRES_URL: postgres://ssi:${POSTGRES_PASSWORD}@postgres-db:5432/ssi
       REDIS_HOST: redis-guard
       REDIS_PORT: "6379"
       STATUS_CACHE_MODE: ${STATUS_CACHE_MODE:-ETAG_REVALIDATE}
-      RECEIPT_SECRET: ${RECEIPT_SECRET:-dev-receipt-secret-change-me}
-    ports: ["4002:4002"]
+      RECEIPT_SECRET: ${RECEIPT_SECRET:?Set RECEIPT_SECRET in .env}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Set DEMO_PASSWORD in .env}
+    ports: ["127.0.0.1:${VERIFIER_BIND_PORT:-4002}:4002"]
     depends_on:
       postgres-db: {condition: service_healthy}
       redis-guard: {condition: service_healthy}
@@ -71,7 +78,7 @@ services:
     networks: [ssi-network]
 
   wallet-pwa:
-    image: ssi-app:latest
+    image: ${CREDENTIAL_IMAGE:-ssi-app:latest}
     command: ["npm", "run", "start:wallet"]
     environment:
       PORT: "3000"
@@ -79,7 +86,10 @@ services:
       VERIFIER_PUBLIC_URL: ${VERIFIER_PUBLIC_URL:-http://localhost:4002}
       ISSUER_INTERNAL_URL: http://issuer-service:4001
       VERIFIER_INTERNAL_URL: http://verifier-service:4002
-    ports: ["3000:3000"]
+      REDIS_HOST: redis-guard
+      WALLET_POSTGRES_URL: postgres://ssi:${POSTGRES_PASSWORD}@postgres-db:5432/ssi
+      WALLET_STORAGE_KEY: ${WALLET_STORAGE_KEY:?Set WALLET_STORAGE_KEY in .env}
+    ports: ["127.0.0.1:${WALLET_BIND_PORT:-3000}:3000"]
     depends_on:
       verifier-service: {condition: service_healthy}
     healthcheck:
@@ -90,6 +100,7 @@ services:
     networks: [ssi-network]
 
   https-tunnel:
+    profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
     command: ["tunnel", "--no-autoupdate", "--url", "http://wallet-pwa:3000"]
     depends_on:
@@ -99,3 +110,6 @@ services:
 networks:
   ssi-network:
     driver: bridge
+
+volumes:
+  pg-data:

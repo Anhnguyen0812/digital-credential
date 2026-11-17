@@ -1,3 +1,4 @@
+import {statusEntry} from '../status/status-store.js';
 import {EDUCATION_CONTEXT_URL} from '../context/education-v1.js';
 import type {LegacyProvenancePayload} from '../crypto/provenance-signer.js';
 
@@ -39,6 +40,7 @@ export function buildUnsignedDegreeVc(params: {
   holderDid: string;
   statusListIndex: number;
   statusListUrl: string;
+  suspensionListUrl?: string;
   issuerDid?: string;
   legacyProvenance?: LegacyProvenancePayload;
   subject?: Partial<typeof DEGREE_DEFAULT_SUBJECT>;
@@ -50,17 +52,14 @@ export function buildUnsignedDegreeVc(params: {
     type: types,
     issuer: params.issuerDid ?? 'did:web:university.edu.vn',
     validFrom: '2026-10-01T00:00:00Z',
-    credentialStatus: {
-      id: `${params.statusListUrl}#${params.statusListIndex}`,
-      type: 'BitstringStatusListEntry',
-      statusPurpose: 'revocation',
-      statusListIndex: String(params.statusListIndex),
-      statusListCredential: params.statusListUrl
-    },
+    credentialStatus: params.suspensionListUrl ? [
+      statusEntry(params.statusListUrl, params.statusListIndex, 'revocation'),
+      statusEntry(params.suspensionListUrl, params.statusListIndex, 'suspension')
+    ] : statusEntry(params.statusListUrl, params.statusListIndex, 'revocation'),
     credentialSubject: {
-      id: params.holderDid,
       ...DEGREE_DEFAULT_SUBJECT,
       ...(params.subject ?? {}),
+      id: params.holderDid,
       ...(params.legacyProvenance ? {legacyProvenance: params.legacyProvenance} : {})
     }
   };
