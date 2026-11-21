@@ -307,6 +307,7 @@
 <div class="toast-box" id="toastBox" role="status"></div>
 
 <script src="https://unpkg.com/html5-qrcode" async></script>
+<script src="/portal.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -320,14 +321,7 @@ function toast(msg, kind = 'info') {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
-    ...opts,
-    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
-  });
-  const data = await res.json().catch(() => ({}));
-  return {ok: res.ok, status: res.status, data};
+  return portalRequest(path, opts);
 }
 
 const CLAIM_LABEL = {
@@ -350,16 +344,28 @@ const CLAIM_LABEL = {
 };
 
 const initialConsent = $('consentPanel').innerHTML;
-let meData = null, consentVersion = 0, savedBackupBundle = null, qrScanner = null;
+let meData = null, consentVersion = 0, savedBackupBundle = null, qrScanner = null, activeRequest = null;
 
-function resetConsent() {
+function resetConsent(clearRequest = true) {
   consentVersion++;
   const panel = $('consentPanel');
   if (panel.innerHTML !== initialConsent) panel.innerHTML = initialConsent;
+  if (clearRequest) {
+    activeRequest = null;
+    renderCredentialOptions();
+  }
 }
 
-$('presentCredSel').onchange = resetConsent;
-$('manualReqUri').oninput = resetConsent;
+$('presentCredSel').onchange = () => {
+  if (activeRequest) loadQrRequest($('manualReqUri').value);
+  else resetConsent(false);
+};
+$('manualReqUri').oninput = () => resetConsent();
+window.addEventListener('portal-session-expired', () => {
+  meData = null;
+  savedBackupBundle = null;
+  resetConsent();
+});
 
 $('authMethod').onchange = () => {
   const m = $('authMethod').value;
@@ -436,8 +442,14 @@ document.querySelectorAll('#navList .nav-btn').forEach(b => {
 });
 
 async function loadMe() {
-  const r = await api('/api/wallet-portal/me');
-  if (!r.ok || !r.data.authenticated) {
+  const r = await api('/api/wallet-portal/me', {busyButton: $('btnRefreshMe')});
+  if (!r.ok) return;
+  if (!r.data.authenticated) {
+    if ($('appView').style.display !== 'none') {
+      window.dispatchEvent(new Event('portal-session-expired'));
+      toast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'err');
+    }
+    resetConsent();
     $('loginView').style.display = 'flex';
     $('appView').style.display = 'none';
     return;
@@ -470,10 +482,19 @@ function credentialTitle(credential) {
     : subject.degreeName || subject.major || 'Bằng tốt nghiệp';
 }
 
-function renderLocalCredentials(creds) {
+function renderCredentialOptions() {
+  const selected = $('presentCredSel').value;
+  const typeOptions = activeRequest?.dcql_query?.credentials?.[0]?.meta?.type_values;
+  const creds = (meData?.wallet?.credentials || []).filter(c => !activeRequest ||
+    typeOptions?.some(types => types.every(type => c.type.includes(type))));
   $('presentCredSel').innerHTML = creds.map(c =>
     `<option value="${esc(c.id)}">${esc(credentialTitle(c))}</option>`
-  ).join('') || '<option value="">Chưa có văn bằng</option>';
+  ).join('') || '<option value="">Không có văn bằng phù hợp</option>';
+  if (creds.some(c => c.id === selected)) $('presentCredSel').value = selected;
+}
+
+function renderLocalCredentials(creds) {
+  renderCredentialOptions();
 
   if (!creds.length) {
     $('localVcList').innerHTML = `
@@ -590,23 +611,33 @@ function extractRequestUri(raw) {
 }
 
 async function loadQrRequest(rawUri) {
-  resetConsent();
+  resetConsent(false);
   const version = consentVersion;
   const uri = extractRequestUri(rawUri);
   if (!uri) { toast('Nhập liên kết yêu cầu.', 'err'); return; }
-  const credentialId = $('presentCredSel').value;
-  if (!credentialId) {
-    toast('Hãy nhận và chọn một văn bằng trước khi trình bày', 'err');
-    return;
-  }
   const sc = await api('/api/wallet/scan', {method: 'POST', body: {request_uri: uri}});
   if (version !== consentVersion) return;
   if (!sc.ok) { toast(sc.data?.error || 'Không tải được yêu cầu', 'err'); return; }
   const request = sc.data.request;
+  activeRequest = request;
+  renderCredentialOptions();
+  const credentialId = $('presentCredSel').value;
+  if (!credentialId) {
+    $('consentPanel').innerHTML = '<div class="notice notice-danger" role="alert">Ví chưa có loại văn bằng mà bên xác minh yêu cầu. Hãy nhận văn bằng phù hợp rồi tải lại yêu cầu.</div>';
+    return;
+  }
   const pv = await api('/api/wallet/preview', {method: 'POST', body: {request, credentialId}});
   if (version !== consentVersion) return;
   if (!pv.ok) { toast(pv.data?.error || 'Không tạo được bản xem trước', 'err'); return; }
   const preview = pv.data;
+  const renderClaim = key => {
+    const value = preview.values[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return `<details class="disclosure-metadata"><summary>${esc(CLAIM_LABEL[key] || key)}</summary><pre class="code-block">${esc(JSON.stringify(value, null, 2))}</pre></details>`;
+    }
+    const text = Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? (value ? 'Có' : 'Không') : value;
+    return `<div class="claim-row"><span>${esc(CLAIM_LABEL[key] || key)}</span><span class="claim-value">${esc(text)}</span></div>`;
+  };
 
   $('consentPanel').innerHTML = `
     <div class="notice notice-info mb-12">
@@ -614,18 +645,10 @@ async function loadQrRequest(rawUri) {
     </div>
 
     <div class="claim-group-title">Bắt buộc</div>
-    ${preview.mandatory.map(k => `
-      <div class="claim-row">
-        <span>${esc(CLAIM_LABEL[k] || k)}</span>
-      </div>
-    `).join('')}
+    ${preview.mandatory.map(renderClaim).join('')}
 
     <div class="claim-group-title">Theo yêu cầu</div>
-    ${preview.requestedOptional.map(k => `
-      <div class="claim-row">
-        <span>${esc(CLAIM_LABEL[k] || k)}</span>
-      </div>
-    `).join('') || '<div class="muted">Không có thuộc tính bổ sung.</div>'}
+    ${preview.requestedOptional.map(renderClaim).join('') || '<div class="muted">Không có thuộc tính bổ sung.</div>'}
 
     <div class="claim-group-title">Không chia sẻ</div>
     ${preview.hidden.map(k => `
@@ -634,6 +657,11 @@ async function loadQrRequest(rawUri) {
       </div>
     `).join('')}
 
+    <details class="disclosure-metadata">
+      <summary>Định danh và thông tin xác minh được gửi kèm</summary>
+      <p class="form-help mt-8">Gói chia sẻ còn có DID người giữ, đơn vị phát hành, loại, thời hạn, mục trạng thái và bằng chứng chữ ký.</p>
+      <pre class="code-block">${esc(JSON.stringify(preview.metadata, null, 2))}</pre>
+    </details>
     <p class="form-help mt-12">Ví sẽ gửi các mục bắt buộc và theo yêu cầu khi bạn đồng ý.</p>
     <div class="btn-group btn-group--equal mt-16">
       <button class="btn-accent" id="btnApprovePresent">Đồng ý chia sẻ</button>
@@ -641,6 +669,7 @@ async function loadQrRequest(rawUri) {
     </div>
   `;
 
+  $('consentPanel').scrollIntoView({block: 'start', behavior: 'smooth'});
   $('btnCancelPresent').onclick = () => {
     consentVersion++;
     $('consentPanel').innerHTML = `<div class="empty-state">Đã từ chối chia sẻ.</div>`;

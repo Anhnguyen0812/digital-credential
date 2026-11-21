@@ -202,7 +202,7 @@
 
             </div>
             <div class="row">
-              <button id="btnBatchApprove" class="btn-secondary" onclick="batchApprovePending()">Duyệt theo lô</button>
+              <button id="btnBatchApprove" class="btn-secondary" onclick="batchApprovePending()" disabled>Duyệt hồ sơ đã chọn (0)</button>
               <button id="btnOpenCreateRec" class="btn-accent">Lập hồ sơ</button>
               <button id="btnOpenLegacyRec" class="btn-secondary">Số hóa sổ gốc</button>
             </div>
@@ -232,6 +232,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th><input type="checkbox" id="selectAllRecords" aria-label="Chọn các hồ sơ có thể duyệt trong danh sách này"></th>
                     <th>Mã hồ sơ</th>
                     <th>Sinh viên</th>
                     <th>Loại</th>
@@ -389,6 +390,24 @@
 </div>
 
 <!-- MODAL: CREATE RECORD -->
+<div class="modal-backdrop" id="modalBatchApprove">
+  <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="batchTitle">
+    <div class="modal-header">
+      <h3 id="batchTitle">Xác nhận duyệt hồ sơ</h3>
+      <button class="btn-secondary btn-sm" onclick="closeModal('modalBatchApprove')">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <p id="batchSummary"></p>
+      <div id="batchRecordList" class="mt-12"></div>
+      <div id="batchResult" class="mt-12" aria-live="polite"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('modalBatchApprove')">Đóng</button>
+      <button class="btn-accent" id="btnConfirmBatch">Xác nhận phê duyệt</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modalCreateRec">
   <div class="modal">
     <div class="modal-header">
@@ -637,6 +656,7 @@
 
 <div class="toast-box" id="toastBox" role="status"></div>
 
+<script src="/portal.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -649,18 +669,37 @@ function toast(msg, kind = 'info') {
   setTimeout(() => el.remove(), 4200);
 }
 
-function openModal(id) { $(id).classList.add('open'); }
-function closeModal(id) { $(id).classList.remove('open'); }
+let modalOpener = null;
+function openModal(id) {
+  modalOpener = document.activeElement;
+  $(id).classList.add('open');
+  const dialog = $(id).querySelector('.modal');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.querySelector('button, input, select, textarea')?.focus();
+}
+function closeModal(id) {
+  if ($(id).querySelector('[aria-busy="true"]')) return;
+  $(id).classList.remove('open');
+  modalOpener?.focus();
+}
+document.addEventListener('keydown', event => {
+  const modal = document.querySelector('.modal-backdrop.open');
+  if (!modal) return;
+  if (event.key === 'Escape') closeModal(modal.id);
+  if (event.key !== 'Tab') return;
+  const elements = [...modal.querySelectorAll('button, input, select, textarea, a[href]')]
+    .filter(el => !el.disabled && el.getClientRects().length);
+  const target = event.shiftKey ? elements.at(-1) : elements[0];
+  if (event.shiftKey && document.activeElement === elements[0] ||
+      !event.shiftKey && document.activeElement === elements.at(-1)) {
+    event.preventDefault();
+    target?.focus();
+  }
+});
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
-    ...opts,
-    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
-  });
-  const data = await res.json().catch(() => ({}));
-  return {ok: res.ok, status: res.status, data};
+  return portalRequest(path, opts);
 }
 
 const STATUS_BADGE = {
@@ -692,10 +731,18 @@ const AUDIT_LABEL = {
 };
 
 let currentUser = null, permissions = [], cachedStudents = [], cachedCourses = [], editingStudentCode = null;
+let displayedRecords = [], selectedRecordIds = new Set(), recordLoadVersion = 0, batchRecords = [];
+window.addEventListener('portal-session-expired', () => {
+  currentUser = null;
+  permissions = [];
+  selectedRecordIds.clear();
+  document.querySelectorAll('.modal-backdrop.open').forEach(el => el.classList.remove('open'));
+});
 
 async function checkSession() {
   const r = await api('/api/portal/auth/me');
   if (!r.ok) {
+    if (r.status !== 401) return;
     $('loginView').style.display = 'flex';
     $('appView').style.display = 'none';
     return;
@@ -827,6 +874,10 @@ async function loadDashboard() {
 }
 
 async function loadRecords() {
+  const version = ++recordLoadVersion;
+  selectedRecordIds.clear();
+  $('recordsBody').querySelectorAll('[data-record-id]').forEach(input => input.checked = false);
+  updateRecordSelection();
   const q = $('recSearch').value.trim();
   const st = $('recStatusFilter').value;
   const kd = $('recKindFilter').value;
@@ -835,9 +886,12 @@ async function loadRecords() {
   if (st) params.set('status', st);
   if (kd) params.set('kind', kd);
   const r = await api('/api/portal/records?' + params.toString());
+  if (version !== recordLoadVersion) return;
   if (!r.ok) return;
-  $('recordsBody').innerHTML = (r.data.items || []).map(x => `
+  displayedRecords = r.data.items || [];
+  $('recordsBody').innerHTML = displayedRecords.map(x => `
     <tr>
+      <td>${canSelectRecord(x) ? `<input type="checkbox" data-record-id="${esc(x.id)}" aria-label="Chọn hồ sơ của ${esc(x.studentName)}">` : ''}</td>
       <td class="mono nowrap">${esc(x.id.slice(0, 10))}…</td>
       <td><b>${esc(x.studentName)}</b><div class="muted mono">${esc(x.studentCode)}</div></td>
       <td><span class="badge badge-neutral">${esc(KIND_LABEL[x.kind] || x.kind)}</span></td>
@@ -849,8 +903,36 @@ async function loadRecords() {
         <button class="btn-sm btn-secondary" onclick="openRecordDetail('${esc(x.id)}')">Chi tiết</button>
       </td>
     </tr>
-  `).join('') || '<tr class="empty-row"><td colspan="8">Không tìm thấy hồ sơ nào.</td></tr>';
+  `).join('') || '<tr class="empty-row"><td colspan="9">Không tìm thấy hồ sơ nào.</td></tr>';
+  updateRecordSelection();
 }
+
+function canSelectRecord(record) {
+  return permissions.includes('records.approve') && record.status === 'PENDING_APPROVAL' &&
+    record.createdBy !== currentUser?.username;
+}
+function updateRecordSelection() {
+  const count = selectedRecordIds.size;
+  $('btnBatchApprove').disabled = count === 0;
+  $('btnBatchApprove').textContent = `Duyệt hồ sơ đã chọn (${count})`;
+  const eligible = displayedRecords.filter(canSelectRecord);
+  $('selectAllRecords').disabled = eligible.length === 0;
+  $('selectAllRecords').checked = eligible.length > 0 && count === eligible.length;
+  $('selectAllRecords').indeterminate = count > 0 && count < eligible.length;
+}
+$('recordsBody').addEventListener('change', event => {
+  const id = event.target.dataset.recordId;
+  if (!id) return;
+  if (event.target.checked) selectedRecordIds.add(id);
+  else selectedRecordIds.delete(id);
+  updateRecordSelection();
+});
+$('selectAllRecords').onchange = event => {
+  const checked = event.target.checked;
+  selectedRecordIds = new Set(checked ? displayedRecords.filter(canSelectRecord).map(record => record.id) : []);
+  $('recordsBody').querySelectorAll('[data-record-id]').forEach(input => input.checked = checked);
+  updateRecordSelection();
+};
 
 $('recSearch').oninput = loadRecords;
 $('recStatusFilter').onchange = loadRecords;
@@ -987,16 +1069,34 @@ window.reinstateRecordPrompt = async function(id) {
 };
 
 window.batchApprovePending = async function() {
-  const listRes = await api('/api/portal/records?status=PENDING_APPROVAL');
-  if (!listRes.ok) return;
-  const ids = (listRes.data.items || []).map(x => x.id);
-  if (!ids.length) { toast('Không có hồ sơ nào đang ở trạng thái chờ duyệt', 'err'); return; }
+  batchRecords = displayedRecords.filter(record => selectedRecordIds.has(record.id) && canSelectRecord(record));
+  if (!batchRecords.length) return;
+  if (batchRecords.length > 100) { toast('Chọn tối đa 100 hồ sơ mỗi lần duyệt.', 'err'); return; }
+  $('batchSummary').textContent = `Bạn sắp phê duyệt ${batchRecords.length} hồ sơ sau. Các văn bằng sẽ sẵn sàng để người học nhận vào ví.`;
+  $('batchRecordList').innerHTML = batchRecords.map(record =>
+    `<div class="record-row"><b>${esc(record.studentName)}</b> · ${esc(record.studentCode)}<div>${esc(record.title)}</div><div class="mono muted">${esc(record.id)}</div></div>`).join('');
+  $('batchResult').textContent = '';
+  $('btnConfirmBatch').hidden = false;
+  openModal('modalBatchApprove');
+};
+
+$('btnConfirmBatch').onclick = async () => {
+  const records = [...batchRecords];
   const r = await api('/api/portal/records/batch-approve', {
+    busyButton: $('btnConfirmBatch'),
     method: 'POST',
-    body: {recordIds: ids, note: 'Phê duyệt hàng loạt theo quyết định công nhận tốt nghiệp'}
+    body: {recordIds: records.map(record => record.id), note: 'Phê duyệt các hồ sơ đã chọn và xác nhận'}
   });
-  if (!r.ok) { toast(r.data?.error || 'Không có quyền phê duyệt hàng loạt', 'err'); return; }
-  toast(`Đã ký duyệt theo lô thành công ${r.data.approvedCount} hồ sơ!`, 'ok');
+  if (!r.ok) {
+    $('batchResult').textContent = r.data?.error || 'Không phê duyệt được hồ sơ.';
+    return;
+  }
+  const skipped = new Map((r.data.skipped || []).map(item => [item.id, item.reason]));
+  const approved = new Set(r.data.approvedIds || []);
+  $('batchRecordList').innerHTML = records.map(record =>
+    `<div class="record-row"><b>${esc(record.studentName)}</b> · ${esc(record.studentCode)}<div>${esc(record.title)}</div><div class="${approved.has(record.id) ? 'text-success' : 'text-danger'}">${approved.has(record.id) ? 'Đã duyệt' : esc(skipped.get(record.id) || 'Chưa xác định kết quả')}</div></div>`).join('');
+  $('batchResult').textContent = `Đã duyệt ${r.data.approvedCount} hồ sơ. Bỏ qua ${skipped.size} hồ sơ.`;
+  $('btnConfirmBatch').hidden = true;
   await refreshAll();
 };
 

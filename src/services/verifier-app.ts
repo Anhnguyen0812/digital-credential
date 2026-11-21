@@ -247,6 +247,10 @@ export async function createVerifierApp(opts: VerifierOptions = {}) {
         if(!identity.verified) return fail(state, 401, 'HOLDER_SPOOF', 'holder_binding', identity.reason!, timings, res);
         const credential = identity.derivedVc;
 
+        if(!Array.isArray(credential.type) || !credential.type.includes(session.type)) {
+          return fail(state, 400, 'INCOMPLETE', 'issuer_proof', 'Loại văn bằng không khớp yêu cầu', timings, res);
+        }
+
         if(credential.issuer !== issuerDid && credential.issuer?.id !== issuerDid) {
           return fail(state, 400, 'UNTRUSTED_ISSUER', 'issuer_proof', 'issuer khong nam trong danh sach tin cay', timings, res);
         }

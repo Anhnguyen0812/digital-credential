@@ -1,6 +1,6 @@
 import * as http from 'node:http';
 import * as path from 'node:path';
-import {WalletClient} from './wallet-client-sdk.js';
+import {WalletClient, PresentationInputError} from './wallet-client-sdk.js';
 import {readBody, RequestBodyError, send, preflight, serveStatic, CORS_HEADERS} from './http-util.js';
 import {randomBytes, createHmac, timingSafeEqual} from 'node:crypto';
 import {HttpError} from '../portal/router.js';
@@ -212,7 +212,9 @@ export async function createWalletApp(opts: WalletAppOptions = {}) {
       if(req.method === 'GET' && serveStatic(res, publicDir, url.pathname, demoMode ? 'index.html' : 'wallet.html')) return;
       return send(res, 404, {error: 'not found'});
     } catch(err: any) {
-      return send(res, err instanceof HttpError || err instanceof RequestBodyError ? err.status : err?.status === 503 ? 503 : 500, {error: err instanceof HttpError || err instanceof RequestBodyError ? err.message : 'Không xử lý được yêu cầu ví'});
+      const inputError = err instanceof PresentationInputError;
+      return send(res, inputError ? 400 : err instanceof HttpError || err instanceof RequestBodyError ? err.status : err?.status === 503 ? 503 : 500,
+        {error: inputError || err instanceof HttpError || err instanceof RequestBodyError ? err.message : 'Không xử lý được yêu cầu ví'});
     }
   });
 

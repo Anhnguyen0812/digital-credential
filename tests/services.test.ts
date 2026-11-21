@@ -154,6 +154,13 @@ describe('W5 - Kien truc 3 mien tach roi (Issuer 4001 / Verifier 4002 / Wallet 3
     expect(pv.body.mandatory).toEqual(expect.arrayContaining(['studentName', 'graduated']));
     expect(pv.body.requestedOptional).toEqual(['major']);
     expect(pv.body.hidden).toEqual(expect.arrayContaining(['gpa', 'studentCode']));
+    expect(pv.body.values).toEqual({
+      studentName: iss.body.credential.credentialSubject.studentName,
+      graduated: true, major: iss.body.credential.credentialSubject.major
+    });
+    expect(pv.body.values).not.toHaveProperty('gpa');
+    expect(pv.body.metadata.subjectDid).toBe(info.did);
+    expect(pv.body.metadata.credentialStatus).toEqual(iss.body.credential.credentialStatus);
     const noConsent = await post('http://localhost:3913/api/wallet/present', {request, credentialId: iss.body.recordId, consent: false});
     expect(noConsent.status).toBe(400);
     const pr = await post('http://localhost:3913/api/wallet/present', {request, credentialId: iss.body.recordId, consent: true, submit: true});
@@ -173,6 +180,27 @@ describe('W5 - Kien truc 3 mien tach roi (Issuer 4001 / Verifier 4002 / Wallet 3
     const eligible = await wallet.present({request, credentialId: recordId, approvedClaims: ['major'], consent: true});
     expect((await submit(eligible.vp_token)).status).toBe(200);
     expect((await submit(eligible.vp_token)).status).toBe(409);
+  });
+
+  test('Ví chặn sai loại ở preview và present, verifier trả đúng lỗi loại văn bằng', async () => {
+    const {recordId} = await issueDegree();
+    const request = await newRequest(['skills'], 'CourseCertificateCredential');
+    for(const endpoint of ['preview', 'present']) {
+      const result = await post('http://localhost:3913/api/wallet/' + endpoint,
+        {request, credentialId: recordId, consent: true});
+      expect(result.status).toBe(400);
+      expect(result.body.error).toContain('Loại văn bằng không khớp');
+    }
+    // A client can alter its local request before signing. The verifier still
+    // enforces the type stored in its own session.
+    const altered = structuredClone(request);
+    altered.dcql_query.credentials[0].meta.type_values = [['VerifiableCredential', 'DegreeCredential']];
+    const out = await wallet.present({request: altered, credentialId: recordId, consent: true});
+    const rejected = await post(VERIFIER + '/api/verifier/direct-post', {state: out.state, vp_token: out.vp_token});
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.attackType).toBe('INCOMPLETE');
+    expect(rejected.body.reason).toContain('Loại văn bằng không khớp');
+    expect(rejected.body.reason).not.toContain('validUntil');
   });
 
 });

@@ -14,7 +14,11 @@ export interface PreviewResult {
   mandatory: string[];
   requestedOptional: string[];
   hidden: string[];
+  values: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 }
+
+export class PresentationInputError extends Error {}
 
 const MANDATORY_BY_TYPE: Record<string, string[]> = {
   DegreeCredential: ['studentName', 'graduated'],
@@ -169,12 +173,24 @@ export class WalletClient {
     const vc = this.store.get(credentialId);
     if(!vc) throw new Error('khong co chung chi nay trong vi');
     const type = this.typeOf(vc);
+    const typeOptions = request?.dcql_query?.credentials?.[0]?.meta?.type_values;
+    if(!Array.isArray(typeOptions) || !typeOptions.some(option =>
+      Array.isArray(option) && option.length > 0 && option.every(value => vc.type.includes(value)))) {
+      throw new PresentationInputError('Loại văn bằng không khớp yêu cầu. Hãy chọn văn bằng phù hợp.');
+    }
     const subjectKeys = Object.keys(vc.credentialSubject).filter(k => k !== 'id');
     const mandatory = subjectKeys.filter(k => MANDATORY_BY_TYPE[type].includes(k) || k === 'legacyProvenance');
     const requested = (request?.dcql_query?.credentials?.[0]?.claims || []).map((c: any) => c.path[c.path.length - 1]);
     const requestedOptional = requested.filter((k: string) => subjectKeys.includes(k) && !mandatory.includes(k));
     const hidden = subjectKeys.filter(k => !mandatory.includes(k) && !requestedOptional.includes(k));
-    return {verifier: request?.client_id, credentialType: type, mandatory, requestedOptional, hidden};
+    const values = Object.fromEntries([...mandatory, ...requestedOptional].map(key => [key, vc.credentialSubject[key]]));
+    const metadata = {
+      holderDid: this.did, subjectDid: vc.credentialSubject.id, issuer: vc.issuer,
+      type: vc.type, validFrom: vc.validFrom, validUntil: vc.validUntil,
+      credentialStatus: vc.credentialStatus,
+      verificationMethod: vc.proof?.verificationMethod
+    };
+    return {verifier: request?.client_id, credentialType: type, mandatory, requestedOptional, hidden, values, metadata};
   }
 
   async present(params: {

@@ -361,6 +361,7 @@
 
 <div class="toast-box" id="toastBox" role="status"></div>
 
+<script src="/portal.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -374,14 +375,7 @@ function toast(msg, kind = 'info') {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: {'Content-Type': 'application/json', ...(opts.headers || {})},
-    ...opts,
-    body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body
-  });
-  const data = await res.json().catch(() => ({}));
-  return {ok: res.ok, status: res.status, data};
+  return portalRequest(path, opts);
 }
 
 const OPTIONAL_CLAIMS = {
@@ -403,10 +397,15 @@ const OPTIONAL_CLAIMS = {
 };
 
 let rpUser = null, templates = [], es = null;
+window.addEventListener('portal-session-expired', () => {
+  rpUser = null;
+  clearVerification();
+});
 
 async function checkSession() {
   const r = await api('/api/rp/auth/me');
   if (!r.ok) {
+    if (r.status !== 401) return;
     $('loginView').style.display = 'flex';
     $('appView').style.display = 'none';
     return;

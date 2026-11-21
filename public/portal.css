@@ -91,6 +91,21 @@ code, .mono { font-family: var(--font-mono); font-size: 12px; overflow-wrap: any
 .muted { color: var(--text-muted); font-size: 12.5px; }
 .text-center { text-align: center; }
 .break-all { word-break: break-all; }
+.connection-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-bottom: 1px solid var(--danger-border);
+}
+.claim-value { font-weight: 600; overflow-wrap: anywhere; text-align: right; }
+.claim-row { gap: 14px; }
+.disclosure-metadata { margin-top: 16px; }
+.disclosure-metadata pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .span-2 { grid-column: span 2; }
 .mt-0 { margin-top: 0; }
 .mt-8 { margin-top: 8px; }
