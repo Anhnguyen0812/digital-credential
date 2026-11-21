@@ -1,44 +1,40 @@
-# Văn bằng Học tập Số Tiết lộ Chọn lọc (W3C VC 2.0 & ECDSA-SD-2023)
+# Văn bằng học tập số
 
-Hệ thống cấp phát, lưu trữ và xác minh văn bằng số tự chủ theo chuẩn **W3C VC 2.0**, **ECDSA-SD-2023**, **Bitstring Status List v1.0** và **OpenID4VCI / OpenID4VP (DCQL)**.
+Hệ thống thử nghiệm gồm cổng nhà trường, ví lưu ký theo từng sinh viên và cổng tuyển dụng. Nhà trường cấp văn bằng JSON-LD bằng ECDSA-SD. Ví xem trước dữ liệu, dẫn xuất bản trình bày và ký gắn với phiên xác minh. Luồng đăng nhập dùng tài khoản mô phỏng.
 
-## 1. Chạy nhanh bằng Docker
+## Chạy cục bộ với Docker Compose
 
-```powershell
-docker compose up --build -d
-```
+Yêu cầu Docker có Compose và Node.js 24 cho kiểm thử. Sao chép .env.example thành .env. Điền POSTGRES_PASSWORD bằng chuỗi an toàn cho URL. Dùng các giá trị ngẫu nhiên độc lập có từ 32 ký tự cho MASTER_KMS_KEY, SESSION_SECRET, RECEIPT_SECRET và WALLET_STORAGE_KEY. Điền DEMO_PASSWORD từ 12 ký tự. Dùng lại cùng cấu hình khi tạo lại container và lưu cấu hình ở nơi an toàn.
 
-| Phân hệ | Địa chỉ | Tài khoản mẫu |
-| :--- | :--- | :--- |
-| **1. Cổng Nhà trường** | `http://localhost:4001/issuer.html` | • Giáo vụ (`REGISTRAR`): `chuyenvien` / `ChuyenVien@2026`<br>• Trưởng phòng (`APPROVER`): `truongphong` / `TruongPhong@2026`<br>• Quản trị (`ADMIN`): `admin` / `Admin@2026` |
-| **2. Ví Sinh viên** | `http://localhost:3000/wallet.html` | • SV đang học (SSO): `23020009@vnu.edu.vn` / `SinhVien@2026`<br>• Cựu SV mất mail (VNeID): CCCD `001193005566`, NS `1993-08-15`, OTP `246810` |
-| **3. Cổng Tuyển dụng** | `http://localhost:4002/verifier.html` | • FPT Software: `hr.fpt` / `FptRecruit@2026`<br>• Viettel Cyber Security: `hr.viettel` / `ViettelSec@2026` |
-| **4. Bàn Demo Hội đồng** | `http://localhost:3000/index.html` | Giao diện 3 cột & mô phỏng 5 kịch bản tấn công |
+~~~powershell
+Copy-Item .env.example .env
+npm ci
+docker compose up --build -d --wait
+~~~
 
-> **Lấy link HTTPS để quét QR bằng điện thoại:** `docker compose logs https-tunnel`
+| Cổng | Địa chỉ | Tài khoản mẫu |
+|---|---|---|
+| Nhà trường | http://localhost:4001/issuer.html | chuyenvien, truongphong, admin |
+| Ví sinh viên | http://localhost:3000/wallet.html | 23020009@vnu.edu.vn, 23020114@vnu.edu.vn |
+| Tuyển dụng | http://localhost:4002/verifier.html | hr.fpt, hr.viettel |
 
-## 2. Chạy Local & Kiểm thử (Node.js >= 20)
+Mọi tài khoản mẫu dùng DEMO_PASSWORD đã đặt khi cơ sở dữ liệu được tạo. PostgreSQL lưu dữ liệu trên named volume. Các cổng mặc định chỉ bind ở loopback. Để thử luồng, đăng nhập ví và nhận hồ sơ đã duyệt. Sau đó đăng nhập tuyển dụng, tạo yêu cầu, sao chép request URI vào ví, xem trước và gửi.
 
-```powershell
-npm install
-npm test              # Chạy 43 ca kiểm thử (6 tệp test)
-npm run typecheck     # Kiểm tra kiểu TypeScript
-npm start             # Chạy server tích hợp tại http://localhost:3000
-npm run benchmark:final
-```
+## Kiểm thử
 
-## 3. Cấu trúc chính
+~~~powershell
+docker compose up -d redis-guard
+npm run check
+~~~
 
-```text
-public/               # Giao diện Web (issuer.html, wallet.html, verifier.html, index.html)
-src/
-  auth/               # Băm mật khẩu scrypt, HttpOnly session cookie, LoginThrottle
-  context/            # JSON-LD context nội bộ & offline documentLoader (did:web, did:key)
-  crypto/             # Multikey P-256, Holder Binding 2 lớp, ký số sổ gốc & SVG Watermark
-  profiles/           # Hồ sơ DegreeCredential & CourseCertificateCredential
-  status/             # W3C Bitstring Status List (131.072 bits nén GZIP + ETag 304)
-  infra/              # PostgreSQL 16 store & Redis 7 ReplayGuard (SET NX EX 300)
-  portal/             # API nghiệp vụ 3 cổng (RBAC 4 mắt, OpenID4VCI PoP, Backup AES-256-GCM)
-  services/           # Entrypoints cho 3 container (issuer, wallet, verifier)
-tests/                # 43 bài kiểm thử tự động (Vitest)
-```
+Lệnh trên cần .env nếu dùng Compose cho Redis. Suite chuẩn dùng Redis tại 127.0.0.1:6379 và kho bộ nhớ cho ứng dụng. Test PostgreSQL/Redis thật dùng một project Compose riêng và dữ liệu mẫu. Đặt DEMO_PASSWORD trong môi trường shell trùng với cấu hình cụm. Đặt ISSUER_PUBLIC_URL, VERIFIER_PUBLIC_URL, COMPOSE_WALLET_URL nếu dùng cổng riêng.
+
+~~~powershell
+npm run check:compose -- before-recreate
+docker compose up -d --force-recreate --wait
+npm run check:compose -- after-recreate
+~~~
+
+Chạy hai giai đoạn trên cụm thử mới. Giai đoạn đầu đình chỉ một văn bằng đã cấp. Giai đoạn sau kiểm tra trạng thái còn hiệu lực qua việc tạo lại container, rồi khôi phục và cấp lại. Demo lịch sử chỉ chạy cục bộ với các entrypoint và cấu hình bộ nhớ riêng. Dùng npm run start:prototype để xem bản prototype tích hợp tuần 7 trên loopback.
+
+Tài liệu phạm vi triển khai và ranh giới tin cậy nằm trong [thiết kế ba tuần](docs/thiet-ke-ba-tuan.md).

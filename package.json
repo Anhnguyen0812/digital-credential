@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "demo": "tsx src/demo.ts",
-    "start": "tsx src/server.ts",
+    "start": "docker compose up --build -d --wait",
     "start:issuer": "tsx src/services/issuer-main.ts",
     "start:verifier": "tsx src/services/verifier-main.ts",
     "start:wallet": "tsx src/services/wallet-main.ts",
@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run test",
     "docker:demo": "docker compose up --build -d",
-    "tunnel:url": "docker compose logs https-tunnel"
+    "tunnel:url": "docker compose logs https-tunnel",
+    "start:prototype": "tsx src/server.ts",
+    "check:compose": "tsx scripts/check-compose.ts"
   },
   "dependencies": {
     "@digitalbazaar/data-integrity": "^2.5.0",

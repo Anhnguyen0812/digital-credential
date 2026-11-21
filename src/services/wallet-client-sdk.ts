@@ -1,3 +1,4 @@
+import {signCredentialProof} from '../crypto/credential-proof.js';
 import {randomBytes, scryptSync, createCipheriv, createDecipheriv} from 'node:crypto';
 import {createCustomDocumentLoader, createLoaderRegistry} from '../context/document-loader.js';
 import {generateHolderKeyPair} from '../crypto/multikey-manager.js';
@@ -5,8 +6,7 @@ import {deriveVc, signPresentationWithHolder} from '../crypto/holder-binding.js'
 import {DEGREE_SELECTIVE_MAP} from '../profiles/degree-profile.js';
 import {COURSE_SELECTIVE_MAP} from '../profiles/course-profile.js';
 
-// Ví người học (non-custodial): giữ khóa riêng của holder + Base VC. Derive và ký Holder Binding
-// diễn ra hoàn toàn trong module này; Verifier/Issuer không bao giờ nhận Base VC.
+// Ví lưu ký giữ khóa và credential trong dịch vụ Wallet. Verifier nhận bản trình bày đã dẫn xuất.
 
 export interface PreviewResult {
   verifier: string;
@@ -52,18 +52,18 @@ export class WalletClient {
   get did(): string { return this.holderKeyPair.controller; }
 
   async signOpenId4VciProof(cNonce: string, issuerDid: string): Promise<string> {
-    const bytes = new TextEncoder().encode(`openid4vci-proof|${cNonce}|${issuerDid}`);
-    const sig: Uint8Array = await this.holderKeyPair.signer().sign({data: bytes});
-    return Buffer.from(sig).toString('base64url');
+    return signCredentialProof(this.holderKeyPair, cNonce, issuerDid);
   }
 
-  async exportBackup(passphrase?: string) {
+  async exportBackup(passphrase?: string, owner?: string) {
     const exportedKey = await this.holderKeyPair.export({publicKey: true, secretKey: true});
     const credentials = [...this.store.entries()].map(([id, vc]) => ({id, credential: vc}));
     const plain = {
       version: 'vnu-wallet-backup-v1',
       exportedAt: new Date().toISOString(),
       did: this.did,
+      owner,
+      history: this.history,
       keyPair: exportedKey,
       credentials
     };
@@ -88,7 +88,7 @@ export class WalletClient {
     };
   }
 
-  async restoreBackup(bundle: any, passphrase?: string) {
+  async restoreBackup(bundle: any, passphrase?: string, owner?: string) {
     let target = bundle;
     if (bundle?.version === 'vnu-wallet-encrypted-v1' || bundle?.ciphertext) {
       if (!passphrase) throw new Error('Cần nhập mật khẩu giải mã bản sao lưu (AES-256-GCM)');
@@ -109,8 +109,14 @@ export class WalletClient {
     if (!target?.keyPair || !Array.isArray(target?.credentials)) {
       throw new Error('Gói sao lưu Ví không hợp lệ');
     }
+    if(owner && target.owner !== owner) throw new Error('Bản sao lưu không thuộc tài khoản này');
     const {fromHolderMultikey} = await import('../crypto/multikey-manager.js');
-    this.holderKeyPair = await fromHolderMultikey(target.keyPair);
+    const holder = await fromHolderMultikey(target.keyPair);
+    if(target.did !== holder.controller || target.credentials.some(item => item?.credential?.credentialSubject?.id !== holder.controller)) {
+      throw new Error('Bản sao lưu không khớp DID của ví');
+    }
+    this.holderKeyPair = holder;
+    this.history = Array.isArray(target.history) ? target.history.slice(0, 100) : [];
     this.store.clear();
     for (const item of target.credentials) {
       if (item?.id && item?.credential) {
@@ -134,7 +140,7 @@ export class WalletClient {
       id,
       type: vc.type,
       hasLegacy: !!vc.credentialSubject?.legacyProvenance,
-      statusListIndex: vc.credentialStatus?.statusListIndex,
+      statusListIndex: (Array.isArray(vc.credentialStatus) ? vc.credentialStatus[0] : vc.credentialStatus)?.statusListIndex,
       validFrom: vc.validFrom,
       validUntil: vc.validUntil,
       subject: vc.credentialSubject
@@ -142,6 +148,7 @@ export class WalletClient {
   }
   getHistory() { return this.history; }
   recordHistory(entry: Omit<WalletClient['history'][number], 'id' | 'at'>) {
+    if(this.history.length >= 100) this.history.pop();
     this.history.unshift({
       id: randomBytes(6).toString('hex'),
       at: new Date().toISOString(),

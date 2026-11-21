@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 export class RedisReplayGuard {
   private socket: net.Socket | null = null;
   private buffer = '';
-  private queue: Array<(reply: string) => void> = [];
+  private queue: Array<{resolve: (reply: string) => void; reject: (error: Error) => void}> = [];
 
   constructor(private host = '127.0.0.1', private port = 6379, private ttlSeconds = 300) {}
 
@@ -16,13 +16,31 @@ export class RedisReplayGuard {
     return new RedisReplayGuard(process.env.REDIS_HOST || '127.0.0.1', Number(process.env.REDIS_PORT) || 6379, ttlSeconds);
   }
 
+  private unavailable() {
+    return Object.assign(new Error('Redis không khả dụng'), {status: 503});
+  }
+
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const s = net.createConnection({host: this.host, port: this.port}, () => resolve());
-      s.setNoDelay(true);
-      s.on('error', reject);
-      s.on('data', chunk => this.onData(chunk.toString('utf8')));
-      this.socket = s;
+      const socket = net.createConnection({host: this.host, port: this.port}, () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      const timeout = setTimeout(() => socket.destroy(this.unavailable()), 3000);
+      const disconnected = () => {
+        clearTimeout(timeout);
+        const error = this.unavailable();
+        reject(error);
+        if(this.socket !== socket) return;
+        this.socket = null;
+        this.buffer = '';
+        for(const command of this.queue.splice(0)) command.reject(error);
+      };
+      socket.setNoDelay(true);
+      socket.on('error', disconnected);
+      socket.on('close', disconnected);
+      socket.on('data', chunk => this.onData(chunk.toString('utf8')));
+      this.socket = socket;
     });
   }
 
@@ -34,17 +52,22 @@ export class RedisReplayGuard {
       const line = this.buffer.slice(0, idx);
       this.buffer = this.buffer.slice(idx + 2);
       const cb = this.queue.shift();
-      if(cb) cb(line);
+      cb?.resolve(line);
     }
   }
 
   private command(args: string[]): Promise<string> {
-    if(!this.socket) throw new Error('chua ket noi Redis');
-    let payload = `*${args.length}\r\n`;
-    for(const a of args) payload += `$${Buffer.byteLength(a)}\r\n${a}\r\n`;
-    return new Promise(resolve => {
-      this.queue.push(resolve);
-      this.socket!.write(payload);
+    const socket = this.socket;
+    if(!socket || socket.destroyed) return Promise.reject(this.unavailable());
+    let payload = '*' + args.length + '\r\n';
+    for(const arg of args) payload += '$' + Buffer.byteLength(arg) + '\r\n' + arg + '\r\n';
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => socket.destroy(this.unavailable()), 3000);
+      this.queue.push({
+        resolve: reply => { clearTimeout(timeout); resolve(reply); },
+        reject: error => { clearTimeout(timeout); reject(error); }
+      });
+      socket.write(payload);
     });
   }
 
@@ -70,7 +93,6 @@ export class RedisReplayGuard {
   }
 
   close() {
-    this.socket?.end();
-    this.socket = null;
+    this.socket?.destroy();
   }
 }

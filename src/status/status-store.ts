@@ -50,6 +50,18 @@ import * as vc from '@digitalbazaar/vc';
 import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
 import {cryptosuite as rdfcCryptosuite} from '@digitalbazaar/ecdsa-rdfc-2019-cryptosuite';
 
+export type StatusPurpose = 'revocation' | 'suspension';
+
+export function statusEntry(url: string, index: number, purpose: StatusPurpose) {
+  return {
+    id: url + '#' + index,
+    type: 'BitstringStatusListEntry',
+    statusPurpose: purpose,
+    statusListIndex: String(index),
+    statusListCredential: url
+  };
+}
+
 export class IssuerStatusRegistry {
   readonly list = new BitstringStatusList(MIN_LIST_LENGTH);
   private currentCredential: any = null;
@@ -59,16 +71,19 @@ export class IssuerStatusRegistry {
   constructor(
     readonly listUrl: string,
     private readonly issuerKeyPair: any,
-    private readonly documentLoader: any
+    private readonly documentLoader: any,
+    readonly purpose: StatusPurpose = 'revocation'
   ) {}
 
   allocateIndex(): number {
+    if(this.nextIndex >= this.list.length) throw new Error("Status list capacity exhausted");
     return this.nextIndex++;
   }
 
   async publishSignedStatusList(): Promise<{credential: any; etag: string}> {
     const encodedList = this.list.encode();
-    this.currentETag = `W/"${createHash('sha256').update(encodedList).digest('hex').slice(0, 32)}"`;
+    const etag = `W/"${createHash('sha256').update(encodedList).digest('hex').slice(0, 32)}"`;
+    if(this.currentCredential && this.currentETag === etag) return {credential: this.currentCredential, etag};
     const unsigned = {
       '@context': ['https://www.w3.org/ns/credentials/v2'],
       id: this.listUrl,
@@ -78,7 +93,7 @@ export class IssuerStatusRegistry {
       credentialSubject: {
         id: `${this.listUrl}#list`,
         type: 'BitstringStatusList',
-        statusPurpose: 'revocation',
+        statusPurpose: this.purpose,
         encodedList
       }
     };
@@ -86,12 +101,16 @@ export class IssuerStatusRegistry {
       signer: this.issuerKeyPair.signer(),
       cryptosuite: rdfcCryptosuite
     });
-    this.currentCredential = await vc.issue({credential: unsigned, suite, documentLoader: this.documentLoader});
-    return {credential: this.currentCredential, etag: this.currentETag};
+    const credential = await vc.issue({credential: unsigned, suite, documentLoader: this.documentLoader});
+    this.currentCredential = credential;
+    this.currentETag = etag;
+    return {credential, etag};
   }
 
   async setRevoked(index: number, revoked = true) {
     this.list.set(index, revoked);
+    if(revoked) this.activeIndexes.add(index);
+    else this.activeIndexes.delete(index);
     return this.publishSignedStatusList();
   }
 
@@ -103,9 +122,13 @@ export class IssuerStatusRegistry {
   get etag() { return this.currentETag; }
 
   // Khoi phuc trang thai sau khi khoi dong lai (doc tu CSDL): chi so tiep theo + cac bit da thu hoi
+  private activeIndexes = new Set<number>();
+
   async restore(nextIndex: number, revokedIndexes: number[]) {
     this.nextIndex = Math.max(this.nextIndex, nextIndex);
+    for(const i of this.activeIndexes) this.list.set(i, false);
     for(const i of revokedIndexes) this.list.set(i, true);
+    this.activeIndexes = new Set(revokedIndexes);
     return this.publishSignedStatusList();
   }
 
@@ -128,7 +151,8 @@ export class VerifierStatusCache {
   constructor(
     private readonly fetcher: StatusFetcher,
     private readonly documentLoader: any,
-    private readonly opts: {mode: StatusCacheMode; ttlMs: number} = {mode: 'ETAG_REVALIDATE', ttlMs: 300_000}
+    private readonly opts: {mode: StatusCacheMode; ttlMs: number} = {mode: 'ETAG_REVALIDATE', ttlMs: 300_000},
+    private readonly expected?: {url: string; issuer: string; purpose: StatusPurpose}
   ) {}
 
   setMode(mode: StatusCacheMode) { this.opts.mode = mode; }
@@ -150,6 +174,12 @@ export class VerifierStatusCache {
       return this.cached.list;
     }
     const slc = res.body;
+    if(res.status !== 200 || !slc?.type?.includes('BitstringStatusListCredential') ||
+      slc.credentialSubject?.type !== 'BitstringStatusList' ||
+      (this.expected && (slc.id !== this.expected.url || slc.issuer !== this.expected.issuer ||
+        slc.credentialSubject.statusPurpose !== this.expected.purpose))) {
+      throw new Error('Danh sách trạng thái không đúng issuer, URL hoặc mục đích');
+    }
     const result = await vc.verifyCredential({
       credential: slc,
       suite: new DataIntegrityProof({cryptosuite: rdfcCryptosuite}),
@@ -165,14 +195,18 @@ export class VerifierStatusCache {
 
   async check(credential: any): Promise<{verified: boolean; reason?: string}> {
     const item = credential?.credentialStatus;
-    if(!item) return {verified: true};
-    if(item.type !== 'BitstringStatusListEntry' || item.statusPurpose !== 'revocation') {
+    if(!item || item.type !== 'BitstringStatusListEntry' ||
+      item.statusPurpose !== (this.expected?.purpose ?? 'revocation') ||
+      (this.expected && (item.statusListCredential !== this.expected.url ||
+        item.id !== this.expected.url + '#' + item.statusListIndex)) ||
+      typeof item.statusListIndex !== 'string' || !/^(0|[1-9][0-9]*)$/.test(item.statusListIndex)) {
       return {verified: false, reason: 'credentialStatus khong dung chuan BitstringStatusListEntry'};
     }
     const idx = Number(item.statusListIndex);
+    if(!Number.isSafeInteger(idx) || idx < 0 || idx >= MIN_LIST_LENGTH) return {verified: false, reason: 'status index khong hop le'};
     const list = await this.getList();
-    if(!Number.isInteger(idx) || idx < 0 || idx >= list.length) return {verified: false, reason: 'status index khong hop le'};
-    if(list.get(idx)) return {verified: false, reason: 'credential da bi thu hoi'};
+    if(idx >= list.length) return {verified: false, reason: 'status index khong hop le'};
+    if(list.get(idx)) return {verified: false, reason: this.expected?.purpose === 'suspension' ? 'credential dang bi dinh chi' : 'credential da bi thu hoi'};
     return {verified: true};
   }
 }

@@ -1,5 +1,5 @@
 import * as http from 'node:http';
-import {readBody, send} from '../services/http-util.js';
+import {readBody, send, RequestBodyError} from '../services/http-util.js';
 
 export class HttpError extends Error {
   constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
@@ -42,8 +42,9 @@ export class Router {
         if(!res.headersSent) send(res, out?.__status ?? 200, out?.__status ? out.body : (out ?? {ok: true}), {'Cache-Control': 'no-store'});
       } catch(err: any) {
         if(res.headersSent) { res.end(); return true; }
-        if(err instanceof HttpError) send(res, err.status, {error: err.message, code: err.code});
-        else send(res, 500, {error: err?.message || String(err)});
+        if(err instanceof HttpError || err instanceof RequestBodyError) send(res, err.status, {error: err.message, code: 'code' in err ? err.code : undefined});
+        else if(err?.status === 503) send(res, 503, {error: 'Dịch vụ phụ trợ không khả dụng'});
+        else send(res, 500, {error: 'Lỗi xử lý nội bộ'});
       }
       return true;
     }

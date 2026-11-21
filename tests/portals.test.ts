@@ -4,6 +4,8 @@ import {createVerifierApp} from '../src/services/verifier-app.js';
 import {createWalletApp} from '../src/services/wallet-app.js';
 import {DEMO_PASSWORD} from '../src/portal/seed-data.js';
 
+let walCookie: string;
+
 function extractCookie(res: Response, name: string): string {
   const raw = res.headers.getSetCookie?.() || [res.headers.get('set-cookie') || ''];
   for (const h of raw) {
@@ -110,7 +112,7 @@ describe('W6 - Hệ thống 3 Web Portal độc lập: Đăng nhập scrypt, Ses
       body: JSON.stringify({method: 'sso', identifier: '23020009@vnu.edu.vn', password: DEMO_PASSWORD})
     });
     expect(stuLogin.status).toBe(200);
-    const walCookie = extractCookie(stuLogin, 'wal_sid');
+    walCookie = extractCookie(stuLogin, 'wal_sid');
 
     // Nhan van bang da duoc duyet (rec-deg-23020009) bang chu ky PoP tren c_nonce
     const claimRes = await fetch('http://localhost:14100/api/wallet-portal/claim', {
@@ -125,22 +127,22 @@ describe('W6 - Hệ thống 3 Web Portal độc lập: Đăng nhập scrypt, Ses
     // Xuat ban sao luu ma hoa AES-256-GCM
     const expRes = await fetch('http://localhost:14100/api/wallet-portal/backup/export', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({passphrase: 'SecretPass@2026'})
+      headers: {'Content-Type': 'application/json', Cookie: walCookie},
+      body: JSON.stringify({passphrase: 'SecretPass@2026', password: DEMO_PASSWORD})
     });
     const encryptedBundle = await expRes.json();
     expect(encryptedBundle.cipher).toBe('aes-256-gcm');
 
     // Mo phong doi sang dien thoai moi (sinh did:key moi)
-    const rotRes = await fetch('http://localhost:14100/api/wallet-portal/device/rotate', {method: 'POST'});
+    const rotRes = await fetch('http://localhost:14100/api/wallet-portal/device/rotate', {method: 'POST', headers: {'Content-Type': 'application/json', Cookie: walCookie}, body: JSON.stringify({password: DEMO_PASSWORD})});
     const rotData = await rotRes.json();
     expect(rotData.newDid).not.toBe(claimed.walletDid);
 
     // Khoi phuc tu ban sao luu AES-256-GCM
     const restRes = await fetch('http://localhost:14100/api/wallet-portal/backup/restore', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({bundle: encryptedBundle, passphrase: 'SecretPass@2026'})
+      headers: {'Content-Type': 'application/json', Cookie: walCookie},
+      body: JSON.stringify({bundle: encryptedBundle, passphrase: 'SecretPass@2026', password: DEMO_PASSWORD})
     });
     expect(restRes.status).toBe(200);
     const restData = await restRes.json();
@@ -165,14 +167,21 @@ describe('W6 - Hệ thống 3 Web Portal độc lập: Đăng nhập scrypt, Ses
     const reqData = await reqRes.json();
     expect(reqData.request.verifier_name).toContain('Viettel Cyber Security');
 
+    const preview = await fetch('http://localhost:14100/api/wallet/preview', {
+      method: 'POST', headers: {'Content-Type': 'application/json', Cookie: walCookie},
+      body: JSON.stringify({request: reqData.request, credentialId: 'rec-deg-23020009'})
+    });
+    expect(preview.status).toBe(200);
+    const {consentId} = await preview.json();
+
     // Sinh vien trinh bay tu Vi
     const presRes = await fetch('http://localhost:14100/api/wallet/present', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', Cookie: walCookie},
       body: JSON.stringify({
         request: reqData.request,
         credentialId: 'rec-deg-23020009',
-        consent: true,
+        consent: true, consentId,
         submit: true
       })
     });
@@ -189,4 +198,60 @@ describe('W6 - Hệ thống 3 Web Portal độc lập: Đăng nhập scrypt, Ses
     expect(histData.items[0].verified).toBe(true);
     expect(histData.items[0].verifierName).toContain('Viettel Cyber Security');
   });
+
+  it('Bảo vệ quyền truy cập mặc định và cô lập ví giữa hai sinh viên', async () => {
+    const base = 'http://localhost:14100';
+    const guarded = [
+      ['/api/issuer/issue-degree', 'POST', 404],
+      ['/api/issuer/revoke', 'POST', 404],
+      ['/api/wallet/backup', 'GET', 404],
+      ['/api/wallet-portal/backup/export', 'POST', 401],
+      ['/api/wallet/info', 'GET', 401],
+      ['/api/verifier/request', 'POST', 401],
+      ['/api/verifier/latest', 'GET', 404],
+    ] as const;
+    for(const [route, method, status] of guarded) {
+      expect((await fetch(base + route, {method})).status).toBe(status);
+    }
+    const guest = await (await fetch(base + '/api/wallet-portal/me')).json();
+    expect(guest.wallet).toEqual({did: null, credentials: [], history: []});
+    const signin = await fetch(base + '/api/wallet-portal/auth/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({method: 'sso', identifier: '23020114@vnu.edu.vn', password: DEMO_PASSWORD})
+    });
+    expect(signin.status).toBe(200);
+    const secondCookie = extractCookie(signin, 'wal_sid');
+    const second = await signin.json();
+    const first = await (await fetch(base + '/api/wallet/info', {headers: {Cookie: walCookie}})).json();
+    expect(second.walletDid).not.toBe(first.did);
+    const record = await fetch(base + '/api/wallet/credential/rec-deg-23020009', {headers: {Cookie: secondCookie}});
+    expect(record.status).toBe(404);
+  });
+
+  it('Lịch sử, biên bản và SSE tuân theo tổ chức của phiên', async () => {
+    const base = 'http://localhost:14102';
+    async function login(username: string) {
+      const response = await fetch(base + '/api/rp/auth/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password: DEMO_PASSWORD})
+      });
+      expect(response.status).toBe(200);
+      return extractCookie(response, 'rp_sid');
+    }
+    const fpt = await login('hr.fpt');
+    const viettel = await login('hr.viettel');
+    const list = await (await fetch(base + '/api/rp/verifications', {headers: {Cookie: viettel}})).json();
+    const verified = list.items.find((item: any) => item.verified);
+    expect(verified).toBeDefined();
+    expect((await (await fetch(base + '/api/rp/verifications', {headers: {Cookie: fpt}})).json()).items).toEqual([]);
+    for(const path of [
+      '/api/rp/verifications/' + verified.state,
+      '/api/rp/verifications/' + verified.state + '/receipt',
+      '/api/verifier/events?state=' + verified.state,
+      '/api/verifier/legacy-scan/' + verified.state
+    ]) {
+      expect((await fetch(base + path, {headers: {Cookie: fpt}})).status).toBe(404);
+    }
+  });
+
 });

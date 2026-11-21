@@ -173,4 +173,7 @@ async function main() {
   console.log('Da xuat .demo-output/final-benchmark-week8.json, scaling-benchmark.json, final-benchmark-week8.md');
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+const run = process.argv.includes('--evaluation')
+  ? import('./evaluation/crypto.js').then(({evaluateCrypto}) => evaluateCrypto())
+  : main();
+run.catch(e => { console.error(e); process.exitCode = 1; });
