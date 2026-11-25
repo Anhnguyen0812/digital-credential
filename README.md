@@ -36,5 +36,3 @@ npm run check:compose -- after-recreate
 ~~~
 
 Chạy hai giai đoạn trên cụm thử mới. Giai đoạn đầu đình chỉ một văn bằng đã cấp. Giai đoạn sau kiểm tra trạng thái còn hiệu lực qua việc tạo lại container, rồi khôi phục và cấp lại. Demo lịch sử chỉ chạy cục bộ với các entrypoint và cấu hình bộ nhớ riêng. Dùng npm run start:prototype để xem bản prototype tích hợp tuần 7 trên loopback.
-
-Tài liệu phạm vi triển khai và ranh giới tin cậy nằm trong [thiết kế ba tuần](docs/thiet-ke-ba-tuan.md).
